@@ -1,74 +1,116 @@
-# React + TypeScript + Vite
+# Currency Management System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ระบบบันทึกข้อมูลใบขนสินค้าและอินวอยซ์พร้อมการดึงอัตราแลกเปลี่ยนอัตโนมัติ
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🚀 How to Starter Project (คู่มือการติดตั้งโครงการ)
 
-## React Compiler
+โปรเจกต์นี้ใช้โครงสร้าง Full-Stack ประกอบด้วย Frontend (React/Vite) และ Backend (Hono/Node) พร้อมฐานข้อมูล PostgreSQL
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### สิ่งที่ต้องมีเบื้องต้น
 
-## Expanding the ESLint configuration
+- [Node.js](https://nodejs.org/) (เวอร์ชัน 20 ขึ้นไป)
+- [Docker](https://www.docker.com/) (สำหรับรันฐานข้อมูล)
+- [Git](https://git-scm.com/)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### ขั้นตอนการรันโปรเจกต์ (Local Development)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. **Clone repository (ถ้ามี)** หรือเข้าไปที่โฟลเดอร์โปรเจกต์
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+   ```bash
+   cd d:\work\Currency-test
+   ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+2. **ติดตั้ง Dependencies**
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+   ```bash
+   npm install
+   ```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+3. **เตรียม Environment Variables**
+   สร้างไฟล์ `.env` ที่ root ของโปรเจกต์ และกำหนดค่าดังนี้:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-# Currency-Test
+   ```env
+   DATABASE_URL="postgresql://currency_user:currency_pass_2024@localhost:5432/currency_db"
+   BETTER_AUTH_SECRET="<your-secret-key-here>"
+   BETTER_AUTH_URL="http://localhost:5173"
+   BOT_API_KEY="<your-bank-of-thailand-api-key>"
+   ```
+
+4. **รันฐานข้อมูลด้วย Docker Compose**
+
+   ```bash
+   docker-compose up db -d
+   ```
+
+5. **รัน Migration และ Seed ข้อมูลเริ่มต้น (User admin เริ่มต้น)**
+
+   ```bash
+   npm run db:migrate
+   npm run db:seed
+   ```
+
+6. **เปิดใช้งานแอปพลิเคชัน (ทั้ง Frontend และ Backend ควบคู่กัน)**
+   ```bash
+   npm run dev
+   ```
+
+   - Frontend จะทำงานที่ `http://localhost:5173`
+   - Backend API จะทำงานที่ `http://localhost:3000`
+
+---
+
+## 📖 How to Use (คู่มือการใช้งาน)
+
+1. **การลงชื่อเข้าใช้**
+   - เมื่อเข้ามาที่ `http://localhost:5173` จะพบกับหน้า Login
+   - สามารถใช้ปุ่ม "สมัครสมาชิก" เพื่อสร้าง User ใหม่ (หรือใช้ Admin User ที่ได้จากขั้นตอน `npm run db:seed`)
+
+2. **หน้า Dashboard**
+   - แสดงสถิติและภาพรวมของมูลค่าต่างๆ (เช่น ยอดรวม THB, จำนวนใบขน, กราฟแนวโน้ม)
+
+3. **หน้า Transactions (รายการใบขนสินค้า)**
+   - ระบบเพิ่ม ลด แก้ไข (CRUD) ใบขนสินค้าและอินวอยซ์
+   - เมื่อเลือกสกุลเงินและวันที่ ระบบจะดึงอัตราแลกเปลี่ยน **อัตโนมัติ** จาก API (BOT หรือ API ที่กำหนด) และคำนวณยอดเงินเป็นบาท (THB) ให้ทันที
+
+4. **หน้าจัดการผู้ใช้ (Admin Only)**
+   - เข้าถึงได้เฉพาะผู้ที่มี Role เป็น "admin"
+   - ใช้จัดการระดับสิทธิ์ (Role) และแบนผู้ใช้ผ่าน `/admin/users`
+
+---
+
+## 🤖 Skills AI (คู่มือและข้อกำหนดสำหรับ AI Agent)
+
+เพื่อให้ AI หรือ Tool อย่าง GitHub Copilot/Cline ทำงานได้อย่างมีประสิทธิภาพ กรุณาปฏิบัติตามข้อกำหนดเหล่านี้เมื่อทำการแก้ไขโค้ด:
+
+### 1. Technology Stack
+
+- **Frontend**: React 19, Vite, Tailwind CSS v4, Zustand, Shadcn UI (Radix), Lucide Icons, Sonner (Toasts)
+- **Backend**: Hono (Node.js Adapter), Better Auth (Authentication)
+- **Database**: PostgreSQL (ผ่าน Prisma ORM)
+- **Language**: TypeScript แบบ Strict Mode
+
+### 2. Architecture & File Structure
+
+- `src/` โฟลเดอร์สำหรับโค้ดฝั่ง Frontend (React Components, Pages, Stores, UI)
+- `server/` โฟลเดอร์สำหรับโค้ดฝั่ง Backend (Hono Routes, Auth Config)
+- `prisma/` การจัดการ Schema Database (`schema.prisma`) และ Seed Script
+
+### 3. Coding Guidelines
+
+- **UI Components**: ใช้ Shadcn UI (จาก `src/components/ui`) เสมอ หลีกเลี่ยงการเขียนคอมโพเนนต์ใหม่ตั้งแต่ต้นถ้ามีมาให้แล้ว
+- **Tailwind CSS**: ตอนนี้ใช้ **Tailwind v4** ห้ามใช้ Arbitrary Values เช่น `top-[50%]` หรือ `left-[50%]` ถ้าหลีกเลี่ยงได้ ให้ใช้ Utility ชั้นนำอย่าง `top-1/2`, `-translate-x-1/2` แทน เพื่อป้องกันการเรนเดอร์ผิดพลาด
+- **State Management**: ใช้ `Zustand` (เช่น `useTransactionStore`) สำหรับจัดการ Global State แทน Context API แบบดั้งเดิม
+- **Data Fetching**: ซิงโครไนซ์ State Store กับ Backend API ให้เป็นระเบียบ และการจัดการ Loading State
+- **Toast Notifications**: ใช้ `sonner` (`import { toast } from 'sonner'`) สำหรับแจ้งเตือนการทำรายการสำเร็จ/ล้มเหลวเสมอ
+
+### 4. Database Changes (Prisma)
+
+- หากมีการเปลี่ยนแปลง Schema ใน `prisma/schema.prisma` ต้องเตือนให้ผู้พัฒนา (User) ทำการรัน `npx prisma migrate dev` ด้วยทุกครั้ง
+- หลีกเลี่ยงการลบตารางที่มีความสัมพันธ์รุนแรงโดยไม่ได้ตรวจสอบ Cascade Constraint
+
+### 5. Authentication
+
+- โปรเจกต์นี้ใช้ **Better Auth** การเข้าถึงข้อมูลผู้ใช้สามารถดึงได้จาก `useSession()` ในฝั่งหน้าบ้าน
+- ฝั่ง Backend ให้เช็คจาก `auth.api.getSession({ headers: c.req.raw.headers })` ก่อนทำรายการ CUD เสมอ เพื่อความปลอดภัย
