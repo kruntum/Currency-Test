@@ -8,10 +8,12 @@ import { FileText, ArrowRightLeft, TrendingUp, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { PageHeader } from '@/components/page-header';
+import { useParams } from 'react-router-dom';
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const { transactions, fetchTransactions } = useTransactionStore();
+  const { companyId } = useParams();
+  const { transactions, fetchTransactions, setCompanyId } = useTransactionStore();
   const [stats, setStats] = useState({
     total: 0,
     totalThb: '0',
@@ -19,9 +21,16 @@ export default function DashboardPage() {
     todayCount: 0,
   });
 
+  // Set companyId in store when URL param changes
+  useEffect(() => {
+    if (companyId) {
+      setCompanyId(parseInt(companyId));
+    }
+  }, [companyId, setCompanyId]);
+
   useEffect(() => {
     fetchTransactions(1);
-  }, [fetchTransactions]);
+  }, [fetchTransactions, companyId]);
 
   useEffect(() => {
     const today = format(new Date(), 'yyyy-MM-dd');

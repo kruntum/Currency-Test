@@ -4,7 +4,12 @@ import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import TransactionPage from '@/pages/TransactionPage';
+import CompanyPage from '@/pages/CompanyPage';
+import CustomerPage from '@/pages/CustomerPage';
+import ReceiptPage from '@/pages/ReceiptPage';
+import TreasuryPage from '@/pages/TreasuryPage';
 import UsersPage from '@/pages/admin/UsersPage';
+import CurrenciesPage from '@/pages/admin/CurrenciesPage';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -43,8 +48,20 @@ export default function App() {
       <Toaster richColors />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Company management */}
         <Route
-          path="/"
+          path="/companies"
+          element={
+            <ProtectedRoute>
+              <CompanyPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Company-scoped routes */}
+        <Route
+          path="/company/:companyId"
           element={
             <ProtectedRoute>
               <DashboardPage />
@@ -52,13 +69,39 @@ export default function App() {
           }
         />
         <Route
-          path="/transactions"
+          path="/company/:companyId/transactions"
           element={
             <ProtectedRoute>
               <TransactionPage />
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/company/:companyId/customers"
+          element={
+            <ProtectedRoute>
+              <CustomerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/:companyId/receipts"
+          element={
+            <ProtectedRoute>
+              <ReceiptPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/:companyId/treasury"
+          element={
+            <ProtectedRoute>
+              <TreasuryPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin routes */}
         <Route
           path="/admin/users"
           element={
@@ -69,7 +112,20 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="/admin/currencies"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <CurrenciesPage />
+              </AdminRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Default: redirect to companies list */}
+        <Route path="/" element={<Navigate to="/companies" replace />} />
+        <Route path="*" element={<Navigate to="/companies" replace />} />
       </Routes>
     </BrowserRouter>
   );

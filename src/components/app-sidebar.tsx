@@ -3,11 +3,15 @@ import {
   LayoutDashboard,
   FileText,
   Users,
-  ArrowRightLeft,
-  ChevronsUpDown,
+  Building2,
+  Coins,
+  ArrowDownToLine,
+  Landmark,
+  UserSquare2,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
+import { CompanySwitcher } from "@/components/company-switcher"
 import {
   Sidebar,
   SidebarContent,
@@ -20,19 +24,36 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from "@/components/ui/sidebar"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useParams } from "react-router-dom"
 import { useSession } from "@/lib/auth-client"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
+  const { companyId } = useParams()
   const { data: session } = useSession()
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'admin'
 
-  const navItems = [
-    { title: "แดชบอร์ด", url: "/", icon: LayoutDashboard },
-    { title: "รายการ", url: "/transactions", icon: FileText },
-    ...(isAdmin ? [{ title: "ผู้ใช้", url: "/admin/users", icon: Users }] : []),
-  ]
+  // Company-scoped navigation items
+  const navItems = companyId
+    ? [
+        { title: "แดชบอร์ด", url: `/company/${companyId}`, icon: LayoutDashboard },
+        { title: "ลูกค้า", url: `/company/${companyId}/customers`, icon: UserSquare2 },
+        { title: "รายการ (Transactions)", url: `/company/${companyId}/transactions`, icon: FileText },
+        { title: "รับเงิน", url: `/company/${companyId}/receipts`, icon: ArrowDownToLine },
+        { title: "คลัง (FCD)", url: `/company/${companyId}/treasury`, icon: Landmark },
+        { title: "บริษัท", url: "/companies", icon: Building2 },
+        ...(isAdmin ? [
+          { title: "ผู้ใช้", url: "/admin/users", icon: Users },
+          { title: "สกุลเงิน", url: "/admin/currencies", icon: Coins },
+        ] : []),
+      ]
+    : [
+        { title: "บริษัท", url: "/companies", icon: Building2 },
+        ...(isAdmin ? [
+          { title: "ผู้ใช้", url: "/admin/users", icon: Users },
+          { title: "สกุลเงิน", url: "/admin/currencies", icon: Coins },
+        ] : []),
+      ]
 
   const userStub = {
     name: session?.user?.name || "User",
@@ -43,20 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <ArrowRightLeft className="size-4" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold text-lg">Currency Decl.</span>
-                <span className="truncate text-xs">System</span>
-              </div>
-              <ChevronsUpDown className="ml-auto size-4" />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <CompanySwitcher />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

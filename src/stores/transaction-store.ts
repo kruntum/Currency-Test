@@ -1,5 +1,25 @@
 import { create } from 'zustand';
 
+export interface InvoiceItem {
+    id?: number;
+    itemNo: number;
+    goodsName: string;
+    netWeight: string;
+    price: string;
+    priceTHB: string;
+    totalPrice: string;
+    totalPriceTHB: string;
+}
+
+export interface Invoice {
+    id?: number;
+    invoiceNumber: string;
+    invoiceDate: string;
+    totalForeign: string;
+    totalThb: string;
+    items: InvoiceItem[];
+}
+
 export interface Transaction {
     id: number;
     declarationNumber: string;
@@ -13,11 +33,17 @@ export interface Transaction {
     rateDate: string;
     rateSource: string;
     createdBy: string;
+    companyId: number | null;
+    customerId: number | null;
     notes: string | null;
+    paymentStatus: string;
+    paidThb: string;
     createdAt: string;
     updatedAt: string;
     user?: { id: string; name: string; email: string };
     currency?: { code: string; nameTh: string; nameEn: string; symbol: string };
+    invoices?: Invoice[];
+    _count?: { invoices: number };
 }
 
 export interface Pagination {
@@ -33,18 +59,16 @@ interface TransactionState {
     loading: boolean;
     error: string | null;
     searchQuery: string;
-    filterCurrency: string;
-    filterDateFrom: string;
-    filterDateTo: string;
+    companyId: number | null;
 
     setSearchQuery: (query: string) => void;
-    setFilterCurrency: (currency: string) => void;
-    setFilterDateFrom: (date: string) => void;
-    setFilterDateTo: (date: string) => void;
     setLimit: (limit: number) => void;
+    setCompanyId: (companyId: number | null) => void;
     fetchTransactions: (page?: number) => Promise<void>;
-    createTransaction: (data: Record<string, string>) => Promise<Transaction>;
-    updateTransaction: (id: number, data: Record<string, string>) => Promise<Transaction>;
+    fetchPendingTransactions: (companyId: number, customerId: number) => Promise<Transaction[]>;
+    fetchTransaction: (id: number) => Promise<Transaction>;
+    createTransaction: (data: Record<string, unknown>) => Promise<Transaction>;
+    updateTransaction: (id: number, data: Record<string, unknown>) => Promise<Transaction>;
     deleteTransaction: (id: number) => Promise<void>;
 }
 
@@ -54,28 +78,22 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     loading: false,
     error: null,
     searchQuery: '',
-    filterCurrency: '',
-    filterDateFrom: '',
-    filterDateTo: '',
+    companyId: null,
 
     setSearchQuery: (query) => set({ searchQuery: query }),
-    setFilterCurrency: (currency) => set({ filterCurrency: currency }),
-    setFilterDateFrom: (date) => set({ filterDateFrom: date }),
-    setFilterDateTo: (date) => set({ filterDateTo: date }),
     setLimit: (limit) => set((state) => ({ pagination: { ...state.pagination, limit, page: 1 } })),
+    setCompanyId: (companyId) => set({ companyId }),
 
     fetchTransactions: async (page = 1) => {
         set({ loading: true, error: null });
         try {
-            const { searchQuery, filterCurrency, filterDateFrom, filterDateTo, pagination } = get();
+            const { searchQuery, pagination, companyId } = get();
             const params = new URLSearchParams({ page: String(page), limit: String(pagination.limit) });
             if (searchQuery) params.set('search', searchQuery);
-            if (filterCurrency) params.set('currency', filterCurrency);
-            if (filterDateFrom) params.set('dateFrom', filterDateFrom);
-            if (filterDateTo) params.set('dateTo', filterDateTo);
+            if (companyId) params.set('companyId', String(companyId));
 
             const res = await fetch(`/api/transactions?${params}`, { credentials: 'include' });
-            if (!res.ok) throw new Error('Failed to fetch transactions');
+            if (!res.ok) throw new Error('Failed to fetch');
             const json = await res.json();
             set({ transactions: json.data, pagination: json.pagination });
         } catch (err) {
@@ -83,6 +101,23 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         } finally {
             set({ loading: false });
         }
+    },
+
+    fetchPendingTransactions: async (companyId, customerId) => {
+        const res = await fetch(`/api/transactions?companyId=${companyId}&search=&paymentStatus=PENDING&limit=100`, { credentials: 'include' });
+        const resPartial = await fetch(`/api/transactions?companyId=${companyId}&search=&paymentStatus=PARTIAL&limit=100`, { credentials: 'include' });
+
+        const data1 = res.ok ? (await res.json()).data : [];
+        const data2 = resPartial.ok ? (await resPartial.json()).data : [];
+
+        return [...data1, ...data2].filter(t => t.customerId === customerId);
+    },
+
+    fetchTransaction: async (id: number) => {
+        const res = await fetch(`/api/transactions/${id}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to fetch transaction');
+        const json = await res.json();
+        return json.data;
     },
 
     createTransaction: async (data) => {
@@ -97,7 +132,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
             throw new Error(err.error || 'Failed to create');
         }
         const json = await res.json();
-        await get().fetchTransactions(get().pagination.page);
         return json.data;
     },
 
@@ -113,7 +147,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
             throw new Error(err.error || 'Failed to update');
         }
         const json = await res.json();
-        await get().fetchTransactions(get().pagination.page);
         return json.data;
     },
 

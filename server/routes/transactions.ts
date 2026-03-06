@@ -1,219 +1,362 @@
 import { Hono } from 'hono';
-import { prisma } from '../db';
-import { calculateThbAmount, parseDecimal } from '../services/currency';
 import { z } from 'zod';
-import type { AppEnv } from '../types';
+import { prisma } from '../db.js';
+import type { AppEnv } from '../types.js';
+import { requireCompanyRole } from '../middleware/companyAuth.js';
 
 const transactionRoutes = new Hono<AppEnv>();
 
-const transactionSchema = z.object({
-    declarationNumber: z.string().min(1, 'Declaration number is required'),
-    declarationDate: z.string().min(1, 'Declaration date is required'),
-    invoiceNumber: z.string().min(1, 'Invoice number is required'),
-    invoiceDate: z.string().min(1, 'Invoice date is required'),
-    currencyCode: z.string().min(1, 'Currency code is required'),
-    foreignAmount: z.string().min(1, 'Foreign amount is required'),
-    exchangeRate: z.string().min(1, 'Exchange rate is required'),
-    rateDate: z.string().min(1, 'Rate date is required'),
-    rateSource: z.enum(['BOT', 'MANUAL']).default('BOT'),
-    notes: z.string().optional(),
+// Zod schemas
+const invoiceItemSchema = z.object({
+    goodsName: z.string().min(1),
+    netWeight: z.string().optional().nullable(),
+    price: z.string().min(1),
+    totalPrice: z.string().min(1),
 });
 
-// GET /api/transactions — List with search, filter, pagination
+const invoiceSchema = z.object({
+    invoiceNumber: z.string().min(1),
+    invoiceDate: z.string().min(1),
+    items: z.array(invoiceItemSchema).min(1, 'At least 1 item required'),
+});
+
+const transactionSchema = z.object({
+    declarationNumber: z.string().min(1),
+    declarationDate: z.string().min(1),
+    currencyCode: z.string().min(1),
+    exchangeRate: z.string().min(1),
+    rateDate: z.string().min(1),
+    rateSource: z.enum(['BOT', 'MANUAL', 'THB']).default('BOT'),
+    companyId: z.number(),
+    customerId: z.number().optional().nullable(),
+    notes: z.string().optional().nullable(),
+    invoices: z.array(invoiceSchema).min(1, 'At least 1 invoice required'),
+});
+
+// All transaction routes expect a company context
+transactionRoutes.use('*', requireCompanyRole(['OWNER', 'ADMIN', 'FINANCE', 'DATA_ENTRY']));
+
+// GET /api/transactions - list with invoice counts
 transactionRoutes.get('/', async (c) => {
-    const user = c.get('user');
     const page = parseInt(c.req.query('page') || '1');
-    const limit = parseInt(c.req.query('limit') || '20');
-    const search = c.req.query('search') || '';
-    const currency = c.req.query('currency') || '';
-    const dateFrom = c.req.query('dateFrom') || '';
-    const dateTo = c.req.query('dateTo') || '';
+    const limit = parseInt(c.req.query('limit') || '30');
+    // Using companyUser from middleware
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
+    const search = c.req.query('search');
 
-    const skip = (page - 1) * limit;
+    const paymentStatus = c.req.query('paymentStatus');
 
-    const where: Record<string, unknown> = {};
-
-    // Role-based access: user sees only own, admin sees all
-    if (user.role !== 'admin') {
-        where.createdBy = user.id;
-    }
-
+    const where: Record<string, unknown> = { companyId };
     if (search) {
         where.OR = [
             { declarationNumber: { contains: search, mode: 'insensitive' } },
-            { invoiceNumber: { contains: search, mode: 'insensitive' } },
+            { invoices: { some: { invoiceNumber: { contains: search, mode: 'insensitive' } } } },
+            { invoices: { some: { items: { some: { goodsName: { contains: search, mode: 'insensitive' } } } } } },
         ];
     }
-
-    if (currency) {
-        where.currencyCode = currency;
-    }
-
-    if (dateFrom || dateTo) {
-        where.declarationDate = {};
-        if (dateFrom) (where.declarationDate as Record<string, unknown>).gte = new Date(dateFrom);
-        if (dateTo) (where.declarationDate as Record<string, unknown>).lte = new Date(dateTo);
+    if (paymentStatus) {
+        where.paymentStatus = paymentStatus;
     }
 
     const [transactions, total] = await Promise.all([
         prisma.transaction.findMany({
-            where: where as never,
-            orderBy: { createdAt: 'desc' },
-            skip,
-            take: limit,
+            where,
             include: {
-                user: { select: { id: true, name: true, email: true } },
                 currency: true,
+                customer: true,
+                user: { select: { id: true, name: true, email: true } },
+                invoices: {
+                    include: { items: { orderBy: { itemNo: 'asc' } } },
+                    orderBy: { id: 'asc' },
+                },
+                _count: { select: { invoices: true, allocations: true } },
             },
+            orderBy: { createdAt: 'desc' },
+            skip: (page - 1) * limit,
+            take: limit,
         }),
-        prisma.transaction.count({ where: where as never }),
+        prisma.transaction.count({ where }),
     ]);
 
     return c.json({
         data: transactions,
-        pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
-        },
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
 });
 
-// GET /api/transactions/:id
+// GET /api/transactions/:id - full detail with invoices + items
 transactionRoutes.get('/:id', async (c) => {
-    const user = c.get('user');
     const id = parseInt(c.req.param('id'));
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
 
-    const transaction = await prisma.transaction.findUnique({
+    const tx = await prisma.transaction.findUnique({
         where: { id },
         include: {
-            user: { select: { id: true, name: true, email: true } },
             currency: true,
+            customer: true,
+            user: { select: { id: true, name: true, email: true } },
+            invoices: {
+                include: { items: { orderBy: { itemNo: 'asc' } } },
+                orderBy: { id: 'asc' },
+            },
+            allocations: {
+                include: { receipt: true, walletTx: true }
+            }
         },
     });
 
-    if (!transaction) {
-        return c.json({ error: 'Transaction not found' }, 404);
-    }
+    if (!tx || tx.companyId !== companyId) return c.json({ error: 'Not found' }, 404);
 
-    // Role check
-    if (user.role !== 'admin' && transaction.createdBy !== user.id) {
-        return c.json({ error: 'Forbidden' }, 403);
-    }
-
-    return c.json({ data: transaction });
+    return c.json({ data: tx });
 });
 
-// POST /api/transactions
-transactionRoutes.post('/', async (c) => {
+// POST /api/transactions - create with nested invoices + items
+transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
     const user = c.get('user');
     const body = await c.req.json();
+    const result = transactionSchema.safeParse(body);
 
-    const parsed = transactionSchema.safeParse(body);
-    if (!parsed.success) {
-        return c.json({ error: 'Validation failed', details: parsed.error.format() }, 400);
+    if (!result.success) {
+        return c.json({ error: 'Validation failed', details: result.error.flatten() }, 400);
     }
 
-    const data = parsed.data;
+    const data = result.data;
+    const rate = parseFloat(data.exchangeRate);
 
-    // Calculate THB amount using decimal.js
-    const foreignAmount = parseDecimal(data.foreignAmount, 4);
-    const exchangeRate = parseDecimal(data.exchangeRate, 6);
-    const thbAmount = calculateThbAmount(foreignAmount, exchangeRate);
+    // Calculate totals
+    let totalForeign = 0;
+    let totalThb = 0;
 
-    const transaction = await prisma.transaction.create({
+    const invoicesData = data.invoices.map((inv) => {
+        let invForeign = 0;
+        let invThb = 0;
+
+        const items = inv.items.map((item, idx) => {
+            const price = parseFloat(item.price);
+            const totalPrice = parseFloat(item.totalPrice);
+            const priceTHB = Math.round(price * rate * 100) / 100;
+            const totalPriceTHB = Math.round(totalPrice * rate * 100) / 100;
+
+            invForeign += totalPrice;
+            invThb += totalPriceTHB;
+
+            return {
+                itemNo: idx + 1,
+                goodsName: item.goodsName,
+                netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
+                price,
+                priceTHB,
+                totalPrice,
+                totalPriceTHB,
+            };
+        });
+
+        totalForeign += invForeign;
+        totalThb += invThb;
+
+        return {
+            invoiceNumber: inv.invoiceNumber,
+            invoiceDate: new Date(inv.invoiceDate),
+            currencyCode: data.currencyCode,
+            totalForeign: invForeign,
+            totalThb: invThb,
+            companyId: data.companyId,
+            createdBy: user.id,
+            items,
+        };
+    });
+
+    const tx = await prisma.transaction.create({
         data: {
             declarationNumber: data.declarationNumber,
             declarationDate: new Date(data.declarationDate),
-            invoiceNumber: data.invoiceNumber,
-            invoiceDate: new Date(data.invoiceDate),
+            invoiceNumber: invoicesData.map(i => i.invoiceNumber).join(', '),
+            invoiceDate: invoicesData[0].invoiceDate,
             currencyCode: data.currencyCode,
-            foreignAmount,
-            exchangeRate,
-            thbAmount,
+            foreignAmount: totalForeign,
+            exchangeRate: rate,
+            thbAmount: totalThb,
             rateDate: new Date(data.rateDate),
             rateSource: data.rateSource,
+            companyId: data.companyId,
+            customerId: data.customerId || null,
             createdBy: user.id,
             notes: data.notes || null,
+            paymentStatus: 'PENDING',
+            paidThb: 0,
+            invoices: {
+                create: invoicesData.map((inv) => ({
+                    invoiceNumber: inv.invoiceNumber,
+                    invoiceDate: inv.invoiceDate,
+                    currencyCode: inv.currencyCode,
+                    totalForeign: inv.totalForeign,
+                    totalThb: inv.totalThb,
+                    companyId: inv.companyId,
+                    createdBy: inv.createdBy,
+                    items: {
+                        create: inv.items,
+                    },
+                })),
+            },
         },
         include: {
-            user: { select: { id: true, name: true, email: true } },
+            invoices: { include: { items: true } },
             currency: true,
         },
     });
 
-    return c.json({ data: transaction }, 201);
+    return c.json({ data: tx }, 201);
 });
 
-// PUT /api/transactions/:id
-transactionRoutes.put('/:id', async (c) => {
-    const user = c.get('user');
+// PUT /api/transactions/:id - update (replace invoices + items)
+transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
     const id = parseInt(c.req.param('id'));
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
+    const user = c.get('user');
+
     const body = await c.req.json();
+    const result = transactionSchema.safeParse(body);
+
+    if (!result.success) {
+        return c.json({ error: 'Validation failed', details: result.error.flatten() }, 400);
+    }
 
     const existing = await prisma.transaction.findUnique({ where: { id } });
+    if (!existing || existing.companyId !== companyId) return c.json({ error: 'Not found' }, 404);
 
-    if (!existing) {
-        return c.json({ error: 'Transaction not found' }, 404);
-    }
+    const data = result.data;
+    const rate = parseFloat(data.exchangeRate);
 
-    if (user.role !== 'admin' && existing.createdBy !== user.id) {
-        return c.json({ error: 'Forbidden' }, 403);
-    }
+    let totalForeign = 0;
+    let totalThb = 0;
 
-    const parsed = transactionSchema.safeParse(body);
-    if (!parsed.success) {
-        return c.json({ error: 'Validation failed', details: parsed.error.format() }, 400);
-    }
+    const invoicesData = data.invoices.map((inv) => {
+        let invForeign = 0;
+        let invThb = 0;
 
-    const data = parsed.data;
-    const foreignAmount = parseDecimal(data.foreignAmount, 4);
-    const exchangeRate = parseDecimal(data.exchangeRate, 6);
-    const thbAmount = calculateThbAmount(foreignAmount, exchangeRate);
+        const items = inv.items.map((item, idx) => {
+            const price = parseFloat(item.price);
+            const totalPrice = parseFloat(item.totalPrice);
+            const priceTHB = Math.round(price * rate * 100) / 100;
+            const totalPriceTHB = Math.round(totalPrice * rate * 100) / 100;
 
-    const transaction = await prisma.transaction.update({
-        where: { id },
-        data: {
-            declarationNumber: data.declarationNumber,
-            declarationDate: new Date(data.declarationDate),
-            invoiceNumber: data.invoiceNumber,
-            invoiceDate: new Date(data.invoiceDate),
+            invForeign += totalPrice;
+            invThb += totalPriceTHB;
+
+            return {
+                itemNo: idx + 1,
+                goodsName: item.goodsName,
+                netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
+                price,
+                priceTHB,
+                totalPrice,
+                totalPriceTHB,
+            };
+        });
+
+        totalForeign += invForeign;
+        totalThb += invThb;
+
+        return {
+            invoiceNumber: inv.invoiceNumber,
+            invoiceDate: new Date(inv.invoiceDate),
             currencyCode: data.currencyCode,
-            foreignAmount,
-            exchangeRate,
-            thbAmount,
-            rateDate: new Date(data.rateDate),
-            rateSource: data.rateSource,
-            notes: data.notes || null,
-        },
-        include: {
-            user: { select: { id: true, name: true, email: true } },
-            currency: true,
-        },
+            totalForeign: invForeign,
+            totalThb: invThb,
+            companyId: data.companyId,
+            createdBy: user.id,
+            items,
+        };
     });
 
-    return c.json({ data: transaction });
+    // Handle payment status protection (cannot reduce transaction total below what's already paid)
+    if (totalThb < existing.paidThb.toNumber()) {
+        return c.json({ error: 'Total THB cannot be less than already paid amount' }, 400);
+    }
+
+    let newStatus = existing.paymentStatus;
+    if (existing.paidThb.toNumber() > 0) {
+        if (existing.paidThb.toNumber() >= totalThb) {
+            newStatus = 'PAID';
+        } else {
+            newStatus = 'PARTIAL';
+        }
+    }
+
+    // Delete old invoices (cascade deletes items), then create new
+    const tx = await prisma.$transaction(async (tx) => {
+        await tx.invoice.deleteMany({ where: { transactionId: id } });
+
+        return tx.transaction.update({
+            where: { id },
+            data: {
+                declarationNumber: data.declarationNumber,
+                declarationDate: new Date(data.declarationDate),
+                invoiceNumber: invoicesData.map(i => i.invoiceNumber).join(', '),
+                invoiceDate: invoicesData[0].invoiceDate,
+                currencyCode: data.currencyCode,
+                foreignAmount: totalForeign,
+                exchangeRate: rate,
+                thbAmount: totalThb,
+                rateDate: new Date(data.rateDate),
+                rateSource: data.rateSource,
+                notes: data.notes || null,
+                customerId: data.customerId || null,
+                paymentStatus: newStatus,
+                invoices: {
+                    create: invoicesData.map((inv) => ({
+                        invoiceNumber: inv.invoiceNumber,
+                        invoiceDate: inv.invoiceDate,
+                        currencyCode: inv.currencyCode,
+                        totalForeign: inv.totalForeign,
+                        totalThb: inv.totalThb,
+                        companyId: inv.companyId,
+                        createdBy: inv.createdBy,
+                        items: { create: inv.items },
+                    })),
+                },
+            },
+            include: {
+                invoices: { include: { items: true } },
+                currency: true,
+            },
+        });
+    });
+
+    return c.json({ data: tx });
 });
 
-// DELETE /api/transactions/:id
-transactionRoutes.delete('/:id', async (c) => {
-    const user = c.get('user');
+// DELETE /api/transactions/:id - cascade delete
+transactionRoutes.delete('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
     const id = parseInt(c.req.param('id'));
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
 
     const existing = await prisma.transaction.findUnique({ where: { id } });
+    if (!existing || existing.companyId !== companyId) return c.json({ error: 'Not found' }, 404);
 
-    if (!existing) {
-        return c.json({ error: 'Transaction not found' }, 404);
+    if (existing.paidThb.toNumber() > 0) {
+        return c.json({ error: 'Cannot delete transaction with payment records' }, 400);
     }
 
-    if (user.role !== 'admin' && existing.createdBy !== user.id) {
-        return c.json({ error: 'Forbidden' }, 403);
-    }
+    // Cascade delete: items -> invoices -> transaction
+    await prisma.$transaction(async (tx) => {
+        const invoiceIds = (await tx.invoice.findMany({
+            where: { transactionId: id },
+            select: { id: true },
+        })).map(i => i.id);
 
-    await prisma.transaction.delete({ where: { id } });
+        if (invoiceIds.length > 0) {
+            await tx.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+            await tx.invoice.deleteMany({ where: { transactionId: id } });
+        }
+        await tx.transaction.delete({ where: { id } });
+    });
 
-    return c.json({ message: 'Transaction deleted' });
+    return c.json({ success: true });
 });
 
 export default transactionRoutes;

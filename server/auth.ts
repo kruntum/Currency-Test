@@ -25,6 +25,8 @@ export const auth = betterAuth({
     },
     trustedOrigins: [
         'http://localhost:5173',
+        'http://localhost:5174',
         'http://localhost:3000',
+        'https://e18f-118-172-187-67.ngrok-free.app',
     ],
 });

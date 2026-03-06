@@ -1,3 +1,5 @@
+import type { CompanyUser } from '@prisma/client';
+
 // Shared Hono environment type for typed context variables
 export type AppEnv = {
     Variables: {
@@ -11,5 +13,6 @@ export type AppEnv = {
             id: string;
             userId: string;
         };
+        companyUser?: CompanyUser;
     };
 };
