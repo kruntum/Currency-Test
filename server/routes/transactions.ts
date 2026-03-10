@@ -49,6 +49,8 @@ transactionRoutes.get('/', async (c) => {
     const paymentStatus = c.req.query('paymentStatus');
     const currencyCode = c.req.query('currencyCode');
     const customerId = c.req.query('customerId');
+    const year = c.req.query('year');
+    const month = c.req.query('month');
 
     const where: Record<string, unknown> = { companyId };
     if (search) {
@@ -66,6 +68,19 @@ transactionRoutes.get('/', async (c) => {
     }
     if (customerId) {
         where.customerId = parseInt(customerId);
+    }
+    if (year || month) {
+        const y = year ? parseInt(year) : new Date().getFullYear();
+        if (month) {
+            const m = parseInt(month);
+            const start = new Date(Date.UTC(y, m - 1, 1));
+            const end = new Date(Date.UTC(y, m, 1));
+            where.declarationDate = { gte: start, lt: end };
+        } else {
+            const start = new Date(Date.UTC(y, 0, 1));
+            const end = new Date(Date.UTC(y + 1, 0, 1));
+            where.declarationDate = { gte: start, lt: end };
+        }
     }
 
     const [transactions, total] = await Promise.all([

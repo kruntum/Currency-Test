@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard-store';
 import { useSession } from '@/lib/auth-client';
 import { formatNumber } from '@/lib/utils';
-import { TrendingUp, Landmark, BarChart3, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet, Users, CalendarDays, Filter } from 'lucide-react';
+import { TrendingUp, Landmark, BarChart3, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet, Users, CalendarDays, Filter, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
+import { Link } from 'react-router-dom';
 import {
   Select,
   SelectContent,
@@ -90,7 +91,7 @@ export default function DashboardPage() {
     .map(([name, value]) => ({ name, value: Math.abs(value), actual: value })) // Abs for pie size, actual for tooltip
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 bg-slate-50/50 dark:bg-slate-950/50">
+    <div className="flex-1 flex flex-col h-full min-h-0">
       <PageHeader 
         title={`Executive FX Dashboard`}
         description={`สรุปภาพรวมกำไร/ขาดทุนจากอัตราแลกเปลี่ยน (P/L) ของ ${session?.user?.name || 'บริษัท'}`}
@@ -351,7 +352,7 @@ export default function DashboardPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {stats.unpaidInvoices.map(inv => (
+                            {stats.unpaidInvoices.slice(0, 5).map(inv => (
                                 <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                                     <td className="px-4 py-1.5">
                                         <div className="font-medium text-slate-800 dark:text-slate-200">{inv.customerName}</div>
@@ -381,6 +382,13 @@ export default function DashboardPage() {
                  <div className="py-6 text-center text-muted-foreground flex flex-col items-center">
                      <span className="text-3xl mb-1">🎉</span>
                      <span className="text-xs">สุดยอด! ไม่มีลูกหนี้ค้างชำระ</span>
+                 </div>
+             )}
+             {stats.unpaidInvoices.length > 5 && (
+                 <div className="p-3 border-t bg-muted/10 text-center">
+                     <Link to={`/company/${cId}/outstanding`} className="text-xs text-primary hover:underline font-medium flex items-center justify-center gap-1">
+                         ดูใบแจ้งหนี้ทั้งหมด ({stats.unpaidInvoices.length}) <ArrowRight className="h-3 w-3" />
+                     </Link>
                  </div>
              )}
           </CardContent>

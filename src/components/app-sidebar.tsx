@@ -41,6 +41,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         { title: "แดชบอร์ด", url: `/company/${companyId}`, icon: LayoutDashboard },
         { title: "ลูกค้า", url: `/company/${companyId}/customers`, icon: UserSquare2 },
         { title: "รายการ (Transactions)", url: `/company/${companyId}/transactions`, icon: FileText },
+        { title: "ลูกหนี้คงค้าง", url: `/company/${companyId}/outstanding`, icon: Users },
         { title: "รับเงิน", url: `/company/${companyId}/receipts`, icon: ArrowDownToLine },
         { title: "คลัง (FCD)", url: `/company/${companyId}/treasury`, icon: Landmark },
         { title: "บริษัท", url: "/companies", icon: Building2 },

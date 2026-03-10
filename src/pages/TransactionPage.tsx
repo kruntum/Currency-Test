@@ -16,11 +16,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Package, Users, CheckCircle2, CircleDashed, Clock, Filter, Download } from 'lucide-react';
+import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Package, Users, CheckCircle2, CircleDashed, Clock, Filter, Download, ChevronsUpDown, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatNumber } from '@/lib/utils';
@@ -33,6 +35,7 @@ export default function TransactionPage() {
     setSearchQuery, setCompanyId, setLimit, fetchTransactions, deleteTransaction,
     filterStatus, filterCurrency, filterCustomerId,
     setFilterStatus, setFilterCurrency, setFilterCustomerId,
+    filterYear, filterMonth, setFilterYear, setFilterMonth,
   } = useTransactionStore();
 
   const { customers, fetchCustomers } = useCustomerStore();
@@ -48,6 +51,7 @@ export default function TransactionPage() {
   
   const [expandedTxIds, setExpandedTxIds] = useState<Set<number>>(new Set());
   const [expandedInvIds, setExpandedInvIds] = useState<Set<number>>(new Set());
+  const [yearOpen, setYearOpen] = useState(false);
 
   useEffect(() => {
     if (companyId) setCompanyId(parseInt(companyId));
@@ -124,6 +128,7 @@ export default function TransactionPage() {
         '#': i + 1,
         'เลขที่ใบขน': tx.declarationNumber,
         'วันที่ใบขน': formatDate(tx.declarationDate),
+        'ชื่อลูกค้า': (tx as any).customer?.name || '-',
         'สกุลเงิน': tx.currencyCode,
         'อัตราแลกเปลี่ยน': Number(tx.exchangeRate),
         'ยอดต่างประเทศ': Number(tx.foreignAmount),
@@ -147,7 +152,7 @@ export default function TransactionPage() {
                 ...baseRow,
                 ...(idx === 0 ? {} : { '#': '', 'เลขที่ใบขน': '', 'วันที่ใบขน': '', 'สกุลเงิน': '', 'อัตราแลกเปลี่ยน': '', 'ยอดต่างประเทศ': '', 'ยอด THB': '', 'แหล่งอัตรา': '', 'สถานะชำระ': '', 'ตัดชำระแล้ว (THB)': '' }),
                 'เลขที่อินวอย': idx === 0 ? inv.invoiceNumber : '',
-                'วันที่อินวอย': idx === 0 ? inv.invoiceDate : '',
+                'วันที่อินวอย': idx === 0 ? formatDate(inv.invoiceDate) : '',
                 'ชื่อสินค้า': item.goodsName,
                 'น้ำหนักสุทธิ': Number(item.netWeight),
                 'ราคา (FCY)': Number(item.totalPrice),
@@ -158,7 +163,7 @@ export default function TransactionPage() {
             rows.push({
               ...baseRow,
               'เลขที่อินวอย': inv.invoiceNumber,
-              'วันที่อินวอย': inv.invoiceDate,
+              'วันที่อินวอย': formatDate(inv.invoiceDate),
             });
           }
         });
@@ -253,8 +258,47 @@ export default function TransactionPage() {
                 ))}
               </SelectContent>
             </Select>
-            {(filterCustomerId || filterStatus || filterCurrency) && (
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterCustomerId(''); setFilterStatus(''); setFilterCurrency(''); fetchTransactions(1); }}>
+            <Popover open={yearOpen} onOpenChange={setYearOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={yearOpen} className="w-[110px] h-8 text-xs justify-between font-normal">
+                  {filterYear || 'ปีทั้งหมด'}
+                  <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[140px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="พิมพ์ปี..." className="h-8 text-xs" />
+                  <CommandList>
+                    <CommandEmpty className="py-2 text-center text-xs text-muted-foreground">กด Enter เพื่อค้นหา</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem value="" onSelect={() => { setFilterYear(''); setYearOpen(false); fetchTransactions(1); }} className="text-xs">
+                        <Check className={`mr-1 h-3 w-3 ${!filterYear ? 'opacity-100' : 'opacity-0'}`} />
+                        ปีทั้งหมด
+                      </CommandItem>
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 3 + i).map((y) => (
+                        <CommandItem key={y} value={String(y)} onSelect={() => { setFilterYear(String(y)); setYearOpen(false); fetchTransactions(1); }} className="text-xs">
+                          <Check className={`mr-1 h-3 w-3 ${filterYear === String(y) ? 'opacity-100' : 'opacity-0'}`} />
+                          {y}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            <Select value={filterMonth} onValueChange={(v) => { setFilterMonth(v === 'all' ? '' : v); fetchTransactions(1); }}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue placeholder="เดือนทั้งหมด" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">เดือนทั้งหมด</SelectItem>
+                {['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'].map((name, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(filterCustomerId || filterStatus || filterCurrency || filterYear || filterMonth) && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterCustomerId(''); setFilterStatus(''); setFilterCurrency(''); setFilterYear(''); setFilterMonth(''); fetchTransactions(1); }}>
                 ล้างตัวกรอง
               </Button>
             )}

@@ -9,6 +9,7 @@ import CustomerPage from '@/pages/CustomerPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import TreasuryPage from '@/pages/TreasuryPage';
 import AuditLogsPage from '@/pages/AuditLogsPage';
+import OutstandingPage from '@/pages/OutstandingPage';
 import UsersPage from '@/pages/admin/UsersPage';
 import CurrenciesPage from '@/pages/admin/CurrenciesPage';
 import { Loader2 } from 'lucide-react';
@@ -82,6 +83,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <CustomerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/:companyId/outstanding"
+          element={
+            <ProtectedRoute>
+              <OutstandingPage />
             </ProtectedRoute>
           }
         />

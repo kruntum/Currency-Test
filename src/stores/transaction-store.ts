@@ -63,6 +63,8 @@ interface TransactionState {
     filterStatus: string;
     filterCurrency: string;
     filterCustomerId: string;
+    filterYear: string;
+    filterMonth: string;
 
     setSearchQuery: (query: string) => void;
     setLimit: (limit: number) => void;
@@ -70,6 +72,8 @@ interface TransactionState {
     setFilterStatus: (status: string) => void;
     setFilterCurrency: (currency: string) => void;
     setFilterCustomerId: (customerId: string) => void;
+    setFilterYear: (year: string) => void;
+    setFilterMonth: (month: string) => void;
     fetchTransactions: (page?: number) => Promise<void>;
     fetchPendingTransactions: (companyId: number, customerId: number) => Promise<Transaction[]>;
     fetchTransaction: (id: number) => Promise<Transaction>;
@@ -88,6 +92,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     filterStatus: '',
     filterCurrency: '',
     filterCustomerId: '',
+    filterYear: '',
+    filterMonth: '',
 
     setSearchQuery: (query) => set({ searchQuery: query }),
     setLimit: (limit) => set((state) => ({ pagination: { ...state.pagination, limit, page: 1 } })),
@@ -95,17 +101,21 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     setFilterStatus: (status) => set({ filterStatus: status }),
     setFilterCurrency: (currency) => set({ filterCurrency: currency }),
     setFilterCustomerId: (customerId) => set({ filterCustomerId: customerId }),
+    setFilterYear: (year) => set({ filterYear: year }),
+    setFilterMonth: (month) => set({ filterMonth: month }),
 
     fetchTransactions: async (page = 1) => {
         set({ loading: true, error: null });
         try {
-            const { searchQuery, pagination, companyId, filterStatus, filterCurrency, filterCustomerId } = get();
+            const { searchQuery, pagination, companyId, filterStatus, filterCurrency, filterCustomerId, filterYear, filterMonth } = get();
             const params = new URLSearchParams({ page: String(page), limit: String(pagination.limit) });
             if (searchQuery) params.set('search', searchQuery);
             if (companyId) params.set('companyId', String(companyId));
             if (filterStatus) params.set('paymentStatus', filterStatus);
             if (filterCurrency) params.set('currencyCode', filterCurrency);
             if (filterCustomerId) params.set('customerId', filterCustomerId);
+            if (filterYear) params.set('year', filterYear);
+            if (filterMonth) params.set('month', filterMonth);
 
             const res = await fetch(`/api/transactions?${params}`, { credentials: 'include' });
             if (!res.ok) throw new Error('Failed to fetch');
