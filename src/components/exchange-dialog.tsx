@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useTreasuryStore, type FCDHoldingPool } from '@/stores/treasury-store';
+import { useTreasuryStore, type FCDWallet } from '@/stores/treasury-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   companyId: number;
-  pool: FCDHoldingPool | null;
+  pool: FCDWallet | null;
 }
 
 const today = format(new Date(), 'yyyy-MM-dd');
@@ -39,12 +39,12 @@ export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
 
   if (!pool) return null;
 
-  const currentFcy = parseFloat(pool.balanceFcy) || 0;
+  const currentFcy = parseFloat(String(pool.balanceFcy)) || 0;
   const sellFcy = parseFloat(amountFcy) || 0;
   const sellRate = parseFloat(actualBankRate) || 0;
   const thbReceived = sellFcy * sellRate;
   
-  const costRate = parseFloat(pool.avgCostRate) || 0;
+  const costRate = parseFloat(String(pool.avgCostRate)) || 0;
   const pl = (sellRate - costRate) * sellFcy;
 
   const handleSave = async () => {
@@ -61,6 +61,7 @@ export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
     try {
       await exchangeFcy({
         companyId,
+        receiptId: pool.id,
         currencyCode: pool.currencyCode,
         amountFcy: sellFcy,
         actualBankRate: sellRate,
@@ -130,7 +131,7 @@ export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
                 placeholder="เช่น 36.50"
             />
             <p className="text-xs text-muted-foreground mt-1 text-right">
-              ต้นทุนเฉลี่ย (Avg Cost): <strong>{formatNumber(costRate, 4)}</strong>
+              ต้นทุนเรท BOT ของบิลนี้: <strong>{formatNumber(costRate, 4)}</strong>
             </p>
           </div>
 

@@ -84,12 +84,18 @@ export function InvoiceCard({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs">เลขที่อินวอย *</Label>
-                <Input className="h-8 text-sm" placeholder="INV-001" value={invoice.invoiceNumber}
+                <Input className="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50" placeholder="INV-001" value={invoice.invoiceNumber}
                   onChange={(e) => onUpdate('invoiceNumber', e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">วันที่อินวอย</Label>
-                <DatePicker value={invoice.invoiceDate} onChange={(v) => onUpdate('invoiceDate', v)} />
+                <DatePicker
+                  value={invoice.invoiceDate}
+                  onChange={(v) => onUpdate('invoiceDate', v)}
+                  className="w-full"
+                  inputClassName="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50"
+                  buttonClassName="h-7 w-7 bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40"
+                />
               </div>
             </div>
 
@@ -115,7 +121,7 @@ export function InvoiceCard({
                         <ProductCombobox 
                           value={item.goodsName} 
                           onChange={(val) => onUpdateItem(itemIdx, 'goodsName', val)} 
-                          className="h-7 text-xs md:text-xs" 
+                          className="h-7 text-xs md:text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40" 
                         />
                       </td>
                       <td className="py-1 px-1">
@@ -123,7 +129,7 @@ export function InvoiceCard({
                           onChange={(e) => onUpdateItem(itemIdx, 'netWeight', e.target.value)} />
                       </td>
                       <td className="py-1 px-1">
-                        <Input className="h-7 text-right text-xs md:text-xs" type="number" step="0.01" placeholder="0.000"
+                        <Input className="h-7 text-right text-xs md:text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50" type="number" step="0.01" placeholder="0.000"
                           value={item.price} onChange={(e) => onUpdateItem(itemIdx, 'price', e.target.value)} />
                       </td>
                       <td className="py-1 px-1">

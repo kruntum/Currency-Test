@@ -20,6 +20,9 @@ products.get('/', async (c) => {
       where: {
         isDeleted: false,
       },
+      include: {
+        user: { select: { id: true, name: true } },
+      },
       orderBy: {
         name: 'asc',
       },

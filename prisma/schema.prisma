@@ -26,6 +26,7 @@ model User {
   invoices     Invoice[]
   products     Product[]
   companyUsers CompanyUser[]
+  auditLogs    AuditLog[]
 
   @@map("user")
 }
@@ -151,6 +152,7 @@ model Company {
   walletTxs    WalletTransaction[]
   fcdPools     FCDHoldingPool[]
   exchangeLogs ExchangeLog[]
+  auditLogs    AuditLog[]
 
   @@index([createdBy])
   @@index([status])
@@ -266,17 +268,22 @@ model Receipt {
   currencyCode String   @map("currency_code")
 
   receivedFcy     Decimal @map("received_fcy") @db.Decimal(18, 4)
+  exchangedFcy    Decimal @default(0) @map("exchanged_fcy") @db.Decimal(18, 4)
   receivedBotRate Decimal @map("received_bot_rate") @db.Decimal(18, 6)
   receivedThb     Decimal @map("received_thb") @db.Decimal(18, 2)
+
+  status       String  @default("UNALLOCATED")
+  allocatedThb Decimal @default(0) @map("allocated_thb") @db.Decimal(18, 2)
 
   bankReference   String?  @map("bank_reference")
   createdByUserId String   @map("created_by_user_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  currency    Currency            @relation(fields: [currencyCode], references: [code])
-  allocations PaymentAllocation[]
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  currency     Currency            @relation(fields: [currencyCode], references: [code])
+  allocations  PaymentAllocation[]
+  exchangeLogs ExchangeLog[]
 
   @@index([companyId])
   @@index([customerId])
@@ -289,8 +296,8 @@ model PaymentAllocation {
   receiptId     Int? @map("receipt_id")
   walletTxId    Int? @map("wallet_tx_id")
 
-  appliedFcy Decimal @map("applied_fcy") @db.Decimal(18, 4)
   appliedThb Decimal @map("applied_thb") @db.Decimal(18, 2)
+  invoiceThb Decimal @map("invoice_thb") @db.Decimal(18, 2)
 
   fxLayer1GainLoss Decimal @map("fx_layer1_gain_loss") @db.Decimal(18, 2)
 
@@ -358,13 +365,36 @@ model ExchangeLog {
   costRate         Decimal @map("cost_rate") @db.Decimal(18, 6)
   fxLayer2GainLoss Decimal @map("fx_layer2_gain_loss") @db.Decimal(18, 2)
 
+  receiptId       Int?     @map("receipt_id")
   createdByUserId String   @map("created_by_user_id")
   exchangedDate   DateTime @map("exchanged_date")
   createdAt       DateTime @default(now()) @map("created_at")
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   currency Currency @relation(fields: [currencyCode], references: [code])
+  receipt  Receipt? @relation(fields: [receiptId], references: [id])
 
   @@index([companyId])
+  @@index([receiptId])
   @@map("exchange_logs")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  companyId Int?     @map("company_id")
+  userId    String   @map("user_id")
+  action    String // e.g., "UPDATE_EXCHANGE_RATE", "CREATE_TRANSACTION"
+  entity    String // e.g., "TRANSACTION", "INVOICE"
+  entityId  String   @map("entity_id") // ID of the modified record (stringified)
+  oldValues Json?    @map("old_values")
+  newValues Json?    @map("new_values")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
 }

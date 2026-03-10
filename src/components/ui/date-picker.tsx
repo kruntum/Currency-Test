@@ -14,9 +14,11 @@ interface DatePickerProps {
   placeholder?: string;
   id?: string;
   className?: string;
+  inputClassName?: string;
+  buttonClassName?: string;
 }
 
-export function DatePicker({ value, onChange, placeholder = "dd/mm/yyyy", id, className }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder = "dd/mm/yyyy", id, className, inputClassName, buttonClassName }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
 
@@ -100,11 +102,11 @@ export function DatePicker({ value, onChange, placeholder = "dd/mm/yyyy", id, cl
         value={inputValue}
         onChange={handleInputChange}
         onBlur={handleInputBlur}
-        className="flex-1"
+        className={cn("flex-1", inputClassName)}
       />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="icon" className="shrink-0">
+          <Button variant="outline" size="icon" className={cn("shrink-0", buttonClassName)}>
             <CalendarIcon className="h-4 w-4" />
           </Button>
         </PopoverTrigger>

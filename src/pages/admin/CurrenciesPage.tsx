@@ -16,7 +16,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Coins, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Coins, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Currency {
@@ -40,6 +40,13 @@ export default function CurrenciesPage() {
   const [formNameTh, setFormNameTh] = useState('');
   const [formNameEn, setFormNameEn] = useState('');
   const [formSymbol, setFormSymbol] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const perPage = 10;
+
+  const filteredCurrencies = searchQuery.trim()
+    ? currencies.filter((c) => c.code.toLowerCase().includes(searchQuery.toLowerCase()) || c.nameTh.toLowerCase().includes(searchQuery.toLowerCase()) || c.nameEn.toLowerCase().includes(searchQuery.toLowerCase()))
+    : currencies;
 
   const fetchCurrencies = async () => {
     setLoading(true);
@@ -149,13 +156,17 @@ export default function CurrenciesPage() {
     <div className="flex-1 flex flex-col h-full min-h-0">
       <PageHeader title="จัดการสกุลเงิน" description="เพิ่ม แก้ไข หรือลบสกุลเงินในระบบ (Admin only)" />
 
-      <div className="flex-1 space-y-6 p-4 overflow-auto min-h-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Coins className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">
-              ทั้งหมด {currencies.length} สกุลเงิน
-            </span>
+      <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-hidden">
+        {/* Top bar: search + add button */}
+        <div className="flex items-center justify-between shrink-0">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="ค้นหาสกุลเงิน (code, ชื่อ)..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            />
           </div>
           <Button onClick={handleOpenCreate} className="gap-2">
             <Plus className="h-4 w-4" />
@@ -163,59 +174,63 @@ export default function CurrenciesPage() {
           </Button>
         </div>
 
-        <Card className="bg-muted/50 rounded-xl border shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">รายการสกุลเงิน</CardTitle>
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-muted/50 rounded-xl border shadow-sm">
+          <CardHeader className="shrink-0 pb-2">
+            <CardTitle className="text-lg">รายการสกุลเงิน <span className="text-sm font-normal text-muted-foreground ml-2">{filteredCurrencies.length} สกุลเงิน</span></CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 overflow-hidden flex flex-col min-h-0 pb-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-            ) : currencies.length === 0 ? (
+            ) : filteredCurrencies.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Coins className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>ยังไม่มีสกุลเงิน</p>
+                <p>{searchQuery.trim() ? 'ไม่พบสกุลเงินที่ค้นหา' : 'ยังไม่มีสกุลเงิน'}</p>
               </div>
             ) : (
-              <div className="overflow-x-auto bg-card rounded-md border">
+              <div className="flex-1 overflow-auto rounded-md min-h-0">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[80px]">Code</TableHead>
-                      <TableHead className="w-[60px]">Symbol</TableHead>
-                      <TableHead>ชื่อไทย</TableHead>
-                      <TableHead>ชื่ออังกฤษ</TableHead>
-                      <TableHead className="text-center">จำนวนรายการ</TableHead>
-                      <TableHead className="text-right">จัดการ</TableHead>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="w-12 text-center py-2 h-9 text-xs font-medium">#</TableHead>
+                      <TableHead className="w-[80px] py-2 h-9 text-xs font-medium">Code</TableHead>
+                      <TableHead className="w-[60px] py-2 h-9 text-xs font-medium">Symbol</TableHead>
+                      <TableHead className="py-2 h-9 text-xs font-medium">ชื่อไทย</TableHead>
+                      <TableHead className="py-2 h-9 text-xs font-medium">ชื่ออังกฤษ</TableHead>
+                      <TableHead className="text-center py-2 h-9 text-xs font-medium">จำนวนรายการ</TableHead>
+                      <TableHead className="text-right py-2 h-9 text-xs font-medium">จัดการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currencies.map((c) => (
-                      <TableRow key={c.code}>
-                        <TableCell>
-                          <Badge variant="outline" className="font-mono">{c.code}</Badge>
+                    {filteredCurrencies.slice((page - 1) * perPage, page * perPage).map((c, index) => (
+                      <TableRow key={c.code} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="text-center text-muted-foreground text-xs py-1.5 h-10">
+                          {(page - 1) * perPage + index + 1}
                         </TableCell>
-                        <TableCell className="text-lg">{c.symbol || '—'}</TableCell>
-                        <TableCell className="font-medium">{c.nameTh}</TableCell>
-                        <TableCell className="text-muted-foreground">{c.nameEn}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="secondary">{c._count?.transactions ?? 0}</Badge>
+                        <TableCell className="py-1.5 h-10">
+                          <Badge variant="outline" className="font-mono text-[10px] shadow-none">{c.code}</Badge>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-base py-1.5 h-10">{c.symbol || '—'}</TableCell>
+                        <TableCell className="font-medium text-sm py-1.5 h-10">{c.nameTh}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs py-1.5 h-10">{c.nameEn}</TableCell>
+                        <TableCell className="text-center py-1.5 h-10">
+                          <Badge variant="secondary" className="text-[10px] shadow-none">{c._count?.transactions ?? 0}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right py-1.5 h-10">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(c)} className="gap-1">
-                              <Pencil className="h-3.5 w-3.5" />
+                            <Button variant="ghost" size="xs" onClick={() => handleOpenEdit(c)} className="gap-1 h-7 text-[10px]">
+                              <Pencil className="h-3 w-3" />
                               แก้ไข
                             </Button>
                             {(c._count?.transactions ?? 0) === 0 && (
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="xs"
                                 onClick={() => { setDeletingCurrency(c); setDeleteDialogOpen(true); }}
-                                className="gap-1 text-destructive hover:text-destructive"
+                                className="gap-1 text-destructive hover:text-destructive h-7 text-[10px]"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3 w-3" />
                                 ลบ
                               </Button>
                             )}
@@ -225,6 +240,32 @@ export default function CurrenciesPage() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+
+            {/* Pagination Footer */}
+            {!loading && filteredCurrencies.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between pt-4 pb-1 px-1 gap-4 mt-auto border-t">
+                <div className="text-sm text-muted-foreground">
+                  รายการทั้งหมด <span className="font-medium text-foreground">{filteredCurrencies.length}</span> รายการ
+                </div>
+                {Math.ceil(filteredCurrencies.length / perPage) > 1 && (
+                  <div className="flex items-center gap-4">
+                    <p className="text-sm text-muted-foreground">
+                      หน้า <span className="font-medium text-foreground">{page}</span> จาก {Math.ceil(filteredCurrencies.length / perPage)}
+                    </p>
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page <= 1}
+                        onClick={() => setPage(page - 1)}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page >= Math.ceil(filteredCurrencies.length / perPage)}
+                        onClick={() => setPage(page + 1)}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

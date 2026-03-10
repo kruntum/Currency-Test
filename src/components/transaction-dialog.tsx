@@ -3,6 +3,7 @@ import { useExchangeRate } from '@/hooks/useExchangeRate';
 import { useTransactionStore } from '@/stores/transaction-store';
 import { useCustomerStore } from '@/stores/customer-store';
 import { InvoiceCard, emptyItem, type FormInvoice, type FormItem } from '@/components/invoice-card';
+import { CustomerCombobox } from '@/components/customer-combobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,7 +38,7 @@ const today = format(new Date(), 'yyyy-MM-dd');
 export function TransactionDialog({ open, onOpenChange, companyId, editId, onSaved }: TransactionDialogProps) {
   const { createTransaction, updateTransaction, fetchTransaction } = useTransactionStore();
   const { rate, loading: rateLoading, fetchRate } = useExchangeRate();
-  const { customers, fetchCustomers } = useCustomerStore();
+  const { fetchCustomers } = useCustomerStore();
   const isEdit = !!editId;
 
   const [declarationNumber, setDeclarationNumber] = useState('');
@@ -261,31 +262,34 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   <div>
                     <Label className="text-xs">เลขที่ใบขนสินค้า *</Label>
-                    <Input className="h-8 text-sm" placeholder="DEC-2026-001" value={declarationNumber}
+                    <Input className="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50" placeholder="DEC-2026-001" value={declarationNumber}
                       onChange={(e) => setDeclarationNumber(e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">วันที่ใบขนสินค้า *</Label>
-                    <DatePicker value={declarationDate} onChange={setDeclarationDate} />
+                    <DatePicker 
+                      value={declarationDate} 
+                      onChange={setDeclarationDate} 
+                      className="w-full"
+                      inputClassName="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50" 
+                      buttonClassName="h-7 w-7 bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40" 
+                    />
                   </div>
                   <div>
                     <Label className="text-xs">ลูกค้า (ผู้ส่งออก)</Label>
-                    <Select value={customerId} onValueChange={setCustomerId}>
-                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="รหัสลูกค้า" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" className="text-muted-foreground italic">-- ไม่ระบุ --</SelectItem>
-                        {(customers[companyId] || []).map(c => (
-                          <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CustomerCombobox
+                      companyId={companyId}
+                      value={customerId}
+                      onChange={setCustomerId}
+                      className="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-xs">สกุลเงิน *</Label>
                     <Select value={currencyCode} onValueChange={setCurrencyCode}>
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus:ring-warning/50"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {currencies.map(c => (
                           <SelectItem key={c.code} value={c.code}>{c.symbol} {c.code} — {c.nameTh}</SelectItem>
@@ -300,7 +304,7 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
                           อัตราแลกเปลี่ยน * {rateLoading && <Loader2 className="inline h-3 w-3 ml-1 animate-spin" />}
                         </Label>
                         <div className="flex gap-1">
-                          <Input className="h-8 text-sm" type="number" step="0.000001" value={exchangeRate}
+                          <Input className="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50" type="number" step="0.000001" value={exchangeRate}
                             onChange={(e) => { setExchangeRate(e.target.value); setRateSource('MANUAL'); }} />
                           <Badge variant={rateSource === 'BOT' ? 'success' : 'warning'} className="shrink-0 self-center text-xs">
                             {rateSource}
@@ -309,7 +313,13 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
                       </div>
                       <div>
                         <Label className="text-xs">วันที่อัตราแลกเปลี่ยน</Label>
-                        <DatePicker value={rateDate} onChange={setRateDate} />
+                        <DatePicker 
+                          value={rateDate} 
+                          onChange={setRateDate} 
+                          className="w-full"
+                          inputClassName="h-7 text-xs bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50" 
+                          buttonClassName="h-7 w-7 bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40" 
+                        />
                       </div>
                     </>
                   ) : (
@@ -368,7 +378,7 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
               {/* Notes */}
               <div>
                 <Label className="text-xs">หมายเหตุ</Label>
-                <Input className="h-8 text-sm" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)" value={notes}
+                <Input className="h-7 text-xs" placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)" value={notes}
                   onChange={(e) => setNotes(e.target.value)} />
               </div>
               </div>

@@ -8,6 +8,7 @@ import CompanyPage from '@/pages/CompanyPage';
 import CustomerPage from '@/pages/CustomerPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import TreasuryPage from '@/pages/TreasuryPage';
+import AuditLogsPage from '@/pages/AuditLogsPage';
 import UsersPage from '@/pages/admin/UsersPage';
 import CurrenciesPage from '@/pages/admin/CurrenciesPage';
 import { Loader2 } from 'lucide-react';
@@ -97,6 +98,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TreasuryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/:companyId/audit-logs"
+          element={
+            <ProtectedRoute>
+              <AuditLogsPage />
             </ProtectedRoute>
           }
         />

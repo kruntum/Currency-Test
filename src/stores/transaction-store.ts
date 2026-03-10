@@ -60,10 +60,16 @@ interface TransactionState {
     error: string | null;
     searchQuery: string;
     companyId: number | null;
+    filterStatus: string;
+    filterCurrency: string;
+    filterCustomerId: string;
 
     setSearchQuery: (query: string) => void;
     setLimit: (limit: number) => void;
     setCompanyId: (companyId: number | null) => void;
+    setFilterStatus: (status: string) => void;
+    setFilterCurrency: (currency: string) => void;
+    setFilterCustomerId: (customerId: string) => void;
     fetchTransactions: (page?: number) => Promise<void>;
     fetchPendingTransactions: (companyId: number, customerId: number) => Promise<Transaction[]>;
     fetchTransaction: (id: number) => Promise<Transaction>;
@@ -79,18 +85,27 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     error: null,
     searchQuery: '',
     companyId: null,
+    filterStatus: '',
+    filterCurrency: '',
+    filterCustomerId: '',
 
     setSearchQuery: (query) => set({ searchQuery: query }),
     setLimit: (limit) => set((state) => ({ pagination: { ...state.pagination, limit, page: 1 } })),
     setCompanyId: (companyId) => set({ companyId }),
+    setFilterStatus: (status) => set({ filterStatus: status }),
+    setFilterCurrency: (currency) => set({ filterCurrency: currency }),
+    setFilterCustomerId: (customerId) => set({ filterCustomerId: customerId }),
 
     fetchTransactions: async (page = 1) => {
         set({ loading: true, error: null });
         try {
-            const { searchQuery, pagination, companyId } = get();
+            const { searchQuery, pagination, companyId, filterStatus, filterCurrency, filterCustomerId } = get();
             const params = new URLSearchParams({ page: String(page), limit: String(pagination.limit) });
             if (searchQuery) params.set('search', searchQuery);
             if (companyId) params.set('companyId', String(companyId));
+            if (filterStatus) params.set('paymentStatus', filterStatus);
+            if (filterCurrency) params.set('currencyCode', filterCurrency);
+            if (filterCustomerId) params.set('customerId', filterCustomerId);
 
             const res = await fetch(`/api/transactions?${params}`, { credentials: 'include' });
             if (!res.ok) throw new Error('Failed to fetch');
@@ -114,14 +129,18 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     },
 
     fetchTransaction: async (id: number) => {
-        const res = await fetch(`/api/transactions/${id}`, { credentials: 'include' });
+        const { companyId } = get();
+        const params = companyId ? `?companyId=${companyId}` : '';
+        const res = await fetch(`/api/transactions/${id}${params}`, { credentials: 'include' });
         if (!res.ok) throw new Error('Failed to fetch transaction');
         const json = await res.json();
         return json.data;
     },
 
     createTransaction: async (data) => {
-        const res = await fetch('/api/transactions', {
+        const { companyId } = get();
+        const params = companyId ? `?companyId=${companyId}` : '';
+        const res = await fetch(`/api/transactions${params}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -136,7 +155,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     },
 
     updateTransaction: async (id, data) => {
-        const res = await fetch(`/api/transactions/${id}`, {
+        const { companyId } = get();
+        const params = companyId ? `?companyId=${companyId}` : '';
+        const res = await fetch(`/api/transactions/${id}${params}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -151,7 +172,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     },
 
     deleteTransaction: async (id) => {
-        const res = await fetch(`/api/transactions/${id}`, {
+        const { companyId } = get();
+        const params = companyId ? `?companyId=${companyId}` : '';
+        const res = await fetch(`/api/transactions/${id}${params}`, {
             method: 'DELETE',
             credentials: 'include',
         });

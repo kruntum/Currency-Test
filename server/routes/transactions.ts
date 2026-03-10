@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import type { AppEnv } from '../types.js';
 import { requireCompanyRole } from '../middleware/companyAuth.js';
+import { logAuditData } from '../services/audit-service.js';
 
 const transactionRoutes = new Hono<AppEnv>();
 
@@ -46,6 +47,8 @@ transactionRoutes.get('/', async (c) => {
     const search = c.req.query('search');
 
     const paymentStatus = c.req.query('paymentStatus');
+    const currencyCode = c.req.query('currencyCode');
+    const customerId = c.req.query('customerId');
 
     const where: Record<string, unknown> = { companyId };
     if (search) {
@@ -57,6 +60,12 @@ transactionRoutes.get('/', async (c) => {
     }
     if (paymentStatus) {
         where.paymentStatus = paymentStatus;
+    }
+    if (currencyCode) {
+        where.currencyCode = currencyCode;
+    }
+    if (customerId) {
+        where.customerId = parseInt(customerId);
     }
 
     const [transactions, total] = await Promise.all([
@@ -207,6 +216,21 @@ transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'])
         },
     });
 
+    // Log the creation
+    await logAuditData({
+        companyId: data.companyId,
+        userId: user.id,
+        action: 'CREATE_TRANSACTION',
+        entity: 'TRANSACTION',
+        entityId: tx.id,
+        newValues: {
+            declarationNumber: tx.declarationNumber,
+            foreignAmount: tx.foreignAmount,
+            exchangeRate: tx.exchangeRate,
+            thbAmount: tx.thbAmount
+        }
+    });
+
     return c.json({ data: tx }, 201);
 });
 
@@ -324,6 +348,27 @@ transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'
                 currency: true,
             },
         });
+    });
+
+    // Log the update
+    await logAuditData({
+        companyId: data.companyId,
+        userId: user.id,
+        action: 'UPDATE_TRANSACTION',
+        entity: 'TRANSACTION',
+        entityId: id,
+        oldValues: {
+            declarationNumber: existing.declarationNumber,
+            foreignAmount: existing.foreignAmount,
+            exchangeRate: existing.exchangeRate,
+            thbAmount: existing.thbAmount
+        },
+        newValues: {
+            declarationNumber: tx.declarationNumber,
+            foreignAmount: tx.foreignAmount,
+            exchangeRate: tx.exchangeRate,
+            thbAmount: tx.thbAmount
+        }
     });
 
     return c.json({ data: tx });

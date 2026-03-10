@@ -1,28 +1,34 @@
 import { create } from 'zustand';
 
-export interface FCDHoldingPool {
-    id: number;
+export interface FCDWallet {
+    id: number; // receiptId
     companyId: number;
     currencyCode: string;
-    balanceFcy: string;
-    avgCostRate: string;
+    balanceFcy: string | number; // Remaining FCY (Decimal from Prisma → string in JSON)
+    avgCostRate: string | number; // BOT rate of the receipt
+    customerName: string; // From Customer
+    receivedDate: string; // From Receipt
+    originalFcy: string | number; // For progress bar/info
 }
 
 export interface ExchangeLog {
     id: number;
     companyId: number;
     currencyCode: string;
-    amountFcy: string;
-    actualBankRate: string;
-    thbReceived: string;
-    costRate: string;
-    fxLayer2GainLoss: string;
+    amountFcy: number;
+    actualBankRate: number;
+    thbReceived: number;
+    costRate: number;
+    fxLayer2GainLoss: number;
     exchangedDate: string;
     currency?: { symbol: string; };
+    receipt?: {
+        customer: { name: string; }
+    };
 }
 
 interface TreasuryState {
-    pools: FCDHoldingPool[];
+    pools: FCDWallet[];
     logs: ExchangeLog[];
     loading: boolean;
     error: string | null;
@@ -67,7 +73,8 @@ export const useTreasuryStore = create<TreasuryState>((set, get) => ({
     },
 
     exchangeFcy: async (data) => {
-        const res = await fetch('/api/treasury/exchange', {
+        const companyId = data.companyId || '';
+        const res = await fetch(`/api/treasury/exchange?companyId=${companyId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTransactionStore } from '@/stores/transaction-store';
+import { useCustomerStore } from '@/stores/customer-store';
 import { TransactionDialog } from '@/components/transaction-dialog';
 import { ProductManagerDialog } from '@/components/product-manager-dialog';
+import { CustomerManagerDialog } from '@/components/customer-manager-dialog';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,22 +20,31 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Package } from 'lucide-react';
+import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Package, Users, CheckCircle2, CircleDashed, Clock, Filter, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatNumber } from '@/lib/utils';
+import * as XLSX from 'xlsx';
 
 export default function TransactionPage() {
   const { companyId } = useParams();
   const {
     transactions, pagination, loading, searchQuery,
     setSearchQuery, setCompanyId, setLimit, fetchTransactions, deleteTransaction,
+    filterStatus, filterCurrency, filterCustomerId,
+    setFilterStatus, setFilterCurrency, setFilterCustomerId,
   } = useTransactionStore();
 
+  const { customers, fetchCustomers } = useCustomerStore();
+  const cId = parseInt(companyId || '0');
+  const companyCustomers = customers[cId] || [];
+
+  const [currencies, setCurrencies] = useState<{ code: string; nameTh: string; symbol: string }[]>([]);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [productManagerOpen, setProductManagerOpen] = useState(false);
+  const [customerManagerOpen, setCustomerManagerOpen] = useState(false);
   
   const [expandedTxIds, setExpandedTxIds] = useState<Set<number>>(new Set());
   const [expandedInvIds, setExpandedInvIds] = useState<Set<number>>(new Set());
@@ -45,6 +56,17 @@ export default function TransactionPage() {
   useEffect(() => {
     fetchTransactions(1);
   }, [fetchTransactions, companyId]);
+
+  // Fetch customer & currency lists for filter dropdowns
+  useEffect(() => {
+    if (cId) {
+      fetchCustomers(cId);
+      fetch('/api/currencies', { credentials: 'include' })
+        .then(r => r.json())
+        .then(j => setCurrencies(j.data || []))
+        .catch(() => {});
+    }
+  }, [cId, fetchCustomers]);
 
   const handleSearch = () => fetchTransactions(1);
 
@@ -89,6 +111,76 @@ export default function TransactionPage() {
     setExpandedInvIds(next);
   };
 
+  const handleExportExcel = () => {
+    if (transactions.length === 0) {
+      toast.error('ไม่มีข้อมูลสำหรับส่งออก');
+      return;
+    }
+
+    const rows: Record<string, unknown>[] = [];
+    transactions.forEach((tx, i) => {
+      // Main transaction row
+      const baseRow = {
+        '#': i + 1,
+        'เลขที่ใบขน': tx.declarationNumber,
+        'วันที่ใบขน': formatDate(tx.declarationDate),
+        'สกุลเงิน': tx.currencyCode,
+        'อัตราแลกเปลี่ยน': Number(tx.exchangeRate),
+        'ยอดต่างประเทศ': Number(tx.foreignAmount),
+        'ยอด THB': Number(tx.thbAmount),
+        'แหล่งอัตรา': tx.rateSource,
+        'สถานะชำระ': tx.paymentStatus,
+        'ตัดชำระแล้ว (THB)': Number(tx.paidThb || 0),
+        'เลขที่อินวอย': '',
+        'วันที่อินวอย': '',
+        'ชื่อสินค้า': '',
+        'น้ำหนักสุทธิ': '',
+        'ราคา (FCY)': '',
+        'ราคา (THB)': '',
+      };
+
+      if (tx.invoices && tx.invoices.length > 0) {
+        tx.invoices.forEach((inv) => {
+          if (inv.items && inv.items.length > 0) {
+            inv.items.forEach((item, idx) => {
+              rows.push({
+                ...baseRow,
+                ...(idx === 0 ? {} : { '#': '', 'เลขที่ใบขน': '', 'วันที่ใบขน': '', 'สกุลเงิน': '', 'อัตราแลกเปลี่ยน': '', 'ยอดต่างประเทศ': '', 'ยอด THB': '', 'แหล่งอัตรา': '', 'สถานะชำระ': '', 'ตัดชำระแล้ว (THB)': '' }),
+                'เลขที่อินวอย': idx === 0 ? inv.invoiceNumber : '',
+                'วันที่อินวอย': idx === 0 ? inv.invoiceDate : '',
+                'ชื่อสินค้า': item.goodsName,
+                'น้ำหนักสุทธิ': Number(item.netWeight),
+                'ราคา (FCY)': Number(item.totalPrice),
+                'ราคา (THB)': Number(item.totalPriceTHB),
+              });
+            });
+          } else {
+            rows.push({
+              ...baseRow,
+              'เลขที่อินวอย': inv.invoiceNumber,
+              'วันที่อินวอย': inv.invoiceDate,
+            });
+          }
+        });
+      } else {
+        rows.push(baseRow);
+      }
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+
+    // Auto-size columns
+    const colWidths = Object.keys(rows[0] || {}).map((key) => ({
+      wch: Math.max(key.length + 2, 14)
+    }));
+    ws['!cols'] = colWidths;
+
+    XLSX.writeFile(wb, `transactions_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
+    toast.success('ส่งออก Excel สำเร็จ');
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">
       <PageHeader
@@ -97,32 +189,75 @@ export default function TransactionPage() {
       />
 
       <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-hidden">
-        {/* Search + limit + action buttons */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
-          <div className="flex flex-1 items-center gap-2 w-full sm:w-auto max-w-xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="ค้นหาเลขที่ใบขน / อินวอย / ชื่อสินค้า..."
-                value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()} />
+        {/* Search + filters + action buttons */}
+        <div className="flex flex-col gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-1 items-center gap-2 w-full sm:w-auto max-w-xl">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input className="pl-9" placeholder="ค้นหาเลขที่ใบขน / อินวอย / ชื่อสินค้า..."
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()} />
+              </div>
             </div>
-            <Select value={String(pagination.limit)} onValueChange={(v) => { setLimit(parseInt(v)); fetchTransactions(1); }}>
-              <SelectTrigger className="w-[120px] shrink-0"><SelectValue /></SelectTrigger>
+            
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+              <Button variant="outline" onClick={handleExportExcel} className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950 flex-1 sm:flex-auto">
+                <Download className="h-4 w-4" /> ส่งออก Excel
+              </Button>
+              <Button variant="outline" onClick={() => setCustomerManagerOpen(true)} className="gap-2 text-primary border-primary/20 hover:bg-primary/10 flex-1 sm:flex-auto">
+                <Users className="h-4 w-4" /> จัดการลูกค้า
+              </Button>
+              <Button variant="outline" onClick={() => setProductManagerOpen(true)} className="gap-2 text-primary border-primary/20 hover:bg-primary/10 flex-1 sm:flex-auto">
+                <Package className="h-4 w-4" /> จัดการสินค้า
+              </Button>
+              <Button onClick={handleCreate} className="gap-2 flex-1 sm:flex-auto shadow-sm">
+                <Plus className="h-4 w-4" /> สร้างรายการใหม่
+              </Button>
+            </div>
+          </div>
+
+          {/* Filter row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Select value={filterCustomerId} onValueChange={(v) => { setFilterCustomerId(v === 'all' ? '' : v); fetchTransactions(1); }}>
+              <SelectTrigger className="w-[180px] h-8 text-xs">
+                <SelectValue placeholder="ลูกค้าทั้งหมด" />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10 รายการ</SelectItem>
-                <SelectItem value="30">30 รายการ</SelectItem>
-                <SelectItem value="50">50 รายการ</SelectItem>
+                <SelectItem value="all">ลูกค้าทั้งหมด</SelectItem>
+                {companyCustomers.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-          </div>
-          
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-            <Button variant="outline" onClick={() => setProductManagerOpen(true)} className="gap-2 text-primary border-primary/20 hover:bg-primary/10 flex-1 sm:flex-auto">
-              <Package className="h-4 w-4" /> จัดการสินค้า
-            </Button>
-            <Button onClick={handleCreate} className="gap-2 flex-1 sm:flex-auto shadow-sm">
-              <Plus className="h-4 w-4" /> สร้างรายการใหม่
-            </Button>
+            <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v === 'all' ? '' : v); fetchTransactions(1); }}>
+              <SelectTrigger className="w-[150px] h-8 text-xs">
+                <SelectValue placeholder="สถานะทั้งหมด" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">สถานะทั้งหมด</SelectItem>
+                <SelectItem value="PENDING">PENDING</SelectItem>
+                <SelectItem value="PARTIAL">PARTIAL</SelectItem>
+                <SelectItem value="PAID">PAID</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterCurrency} onValueChange={(v) => { setFilterCurrency(v === 'all' ? '' : v); fetchTransactions(1); }}>
+              <SelectTrigger className="w-[150px] h-8 text-xs">
+                <SelectValue placeholder="สกุลเงินทั้งหมด" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">สกุลเงินทั้งหมด</SelectItem>
+                {currencies.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>{c.symbol} {c.code} - {c.nameTh}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(filterCustomerId || filterStatus || filterCurrency) && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterCustomerId(''); setFilterStatus(''); setFilterCurrency(''); fetchTransactions(1); }}>
+                ล้างตัวกรอง
+              </Button>
+            )}
           </div>
         </div>
 
@@ -147,6 +282,7 @@ export default function TransactionPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/30">
                       <TableHead className="w-[40px]"></TableHead>
+                      <TableHead className="w-12 text-center font-medium">#</TableHead>
                       <TableHead className="font-medium">เลขที่ใบขน</TableHead>
                       <TableHead className="font-medium">วันที่</TableHead>
                       <TableHead className="font-medium text-center">อินวอย</TableHead>
@@ -155,15 +291,19 @@ export default function TransactionPage() {
                       <TableHead className="font-medium text-right">ยอดต่างประเทศ</TableHead>
                       <TableHead className="font-medium text-right">ยอด THB</TableHead>
                       <TableHead className="font-medium">แหล่ง</TableHead>
+                      <TableHead className="font-medium text-center">สถานะ</TableHead>
                       <TableHead className="font-medium text-right">จัดการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactions.map((tx) => (
+                    {transactions.map((tx, index) => (
                       <React.Fragment key={tx.id}>
                         <TableRow className="hover:bg-muted/30 cursor-pointer" onClick={() => toggleTx(tx.id)}>
                           <TableCell className="p-1 text-center">
                             {expandedTxIds.has(tx.id) ? <ChevronDown className="h-4 w-4 text-muted-foreground mx-auto" /> : <ChevronRight className="h-4 w-4 text-muted-foreground mx-auto" />}
+                          </TableCell>
+                          <TableCell className="text-center text-muted-foreground text-xs py-1">
+                            {(pagination.page - 1) * pagination.limit + index + 1}
                           </TableCell>
                           <TableCell className="font-medium text-xs py-1">{tx.declarationNumber}</TableCell>
                           <TableCell className="text-xs py-1">{formatDate(tx.declarationDate)}</TableCell>
@@ -171,7 +311,14 @@ export default function TransactionPage() {
                             <Badge variant="secondary">{tx._count?.invoices ?? 0}</Badge>
                           </TableCell>
                           <TableCell className="py-1">
-                            <Badge variant="outline">{tx.currency?.symbol} {tx.currencyCode}</Badge>
+                            <div className="flex items-center gap-1.5 w-fit">
+                              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-600 dark:text-slate-300 shadow-xs">
+                                {tx.currency?.symbol}
+                              </span>
+                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                {tx.currencyCode}
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right text-xs py-1">{formatNumber(tx.exchangeRate, 6)}</TableCell>
                           <TableCell className="text-right py-1">
@@ -181,8 +328,22 @@ export default function TransactionPage() {
                             ฿{formatNumber(tx.thbAmount)}
                           </TableCell>
                           <TableCell className="py-1">
-                            <Badge variant={tx.rateSource === 'BOT' ? 'success' : 'warning'} className="text-xs">
+                            <Badge 
+                              variant={tx.rateSource === 'BOT' ? 'info' : 'muted'} 
+                              className="text-[10px] shadow-none"
+                            >
                               {tx.rateSource}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center py-1">
+                            <Badge 
+                              variant={tx.paymentStatus === 'PAID' ? 'success' : tx.paymentStatus === 'PARTIAL' ? 'warning' : 'secondary'} 
+                              className="text-[10px] w-20 justify-center shadow-none gap-1 pl-1.5"
+                            >
+                              {tx.paymentStatus === 'PAID' && <CheckCircle2 className="w-3 h-3" />}
+                              {tx.paymentStatus === 'PARTIAL' && <CircleDashed className="w-3 h-3" />}
+                              {tx.paymentStatus === 'PENDING' && <Clock className="w-3 h-3" />}
+                              {tx.paymentStatus}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right py-1" onClick={(e) => e.stopPropagation()}>
@@ -201,7 +362,7 @@ export default function TransactionPage() {
                         
                         {expandedTxIds.has(tx.id) && tx.invoices && tx.invoices.length > 0 && (
                           <TableRow className="bg-muted/10 hover:bg-muted/10 border-b-0">
-                            <TableCell colSpan={10} className="p-0 border-b-0">
+                            <TableCell colSpan={11} className="p-0 border-b-0">
                               <div className="pl-[60px] pr-4 py-3 min-h-0 bg-linear-to-r from-transparent to-muted/20">
                                 <Table className="bg-background border rounded-md overflow-hidden">
                                   <TableHeader>
@@ -278,8 +439,24 @@ export default function TransactionPage() {
             {/* Pagination & Footer */}
             {!loading && transactions.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between pt-4 pb-1 px-1 gap-4 mt-auto border-t">
-                <div className="text-sm text-muted-foreground">
-                  รายการทั้งหมด <span className="font-medium text-foreground">{pagination.total}</span> รายการ
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">
+                    รายการทั้งหมด <span className="font-medium text-foreground">{pagination.total}</span> รายการ
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">แสดง</span>
+                    <Select value={String(pagination.limit)} onValueChange={(v) => { setLimit(parseInt(v)); fetchTransactions(1); }}>
+                      <SelectTrigger className="w-[70px] h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30">30</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">รายการ</span>
+                  </div>
                 </div>
                 
                 {pagination.totalPages > 1 && (
@@ -318,6 +495,13 @@ export default function TransactionPage() {
       <ProductManagerDialog
         open={productManagerOpen}
         onOpenChange={setProductManagerOpen}
+      />
+
+      {/* Customer Manager Dialog */}
+      <CustomerManagerDialog
+        open={customerManagerOpen}
+        onOpenChange={setCustomerManagerOpen}
+        companyId={parseInt(companyId || '0')}
       />
 
       {/* Delete confirmation */}

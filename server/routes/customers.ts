@@ -21,7 +21,7 @@ customerRoutes.get('/', async (c) => {
     const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
 
     const customers = await prisma.customer.findMany({
-        where: { companyId },
+        where: { companyId, isDeleted: false },
         orderBy: { name: 'asc' },
     });
 
@@ -55,5 +55,64 @@ customerRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), a
     return c.json({ data: customer }, 201);
 });
 
-// PUT & DELETE omitted for brevity unless needed. We'll just provide CRUD.
+// PUT /api/companies/:companyId/customers/:customerId - Update customer
+customerRoutes.put('/:customerId', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
+    const customerId = parseInt(c.req.param('customerId'));
+    const body = await c.req.json();
+
+    const parsed = customerSchema.safeParse(body);
+    if (!parsed.success) {
+        return c.json({ error: 'Validation failed', details: parsed.error.format() }, 400);
+    }
+
+    const { name, address, taxId } = parsed.data;
+
+    // Verify it exists in this company
+    const existing = await prisma.customer.findFirst({
+        where: { id: customerId, companyId, isDeleted: false }
+    });
+
+    if (!existing) {
+        return c.json({ error: 'Customer not found' }, 404);
+    }
+
+    const updated = await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+            name,
+            address: address || null,
+            taxId: taxId || null,
+        }
+    });
+
+    return c.json({ data: updated });
+});
+
+// DELETE /api/companies/:companyId/customers/:customerId - Soft Delete customer
+customerRoutes.delete('/:customerId', requireCompanyRole(['OWNER', 'ADMIN']), async (c) => {
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
+    const customerId = parseInt(c.req.param('customerId'));
+
+    // Verify it exists in this company
+    const existing = await prisma.customer.findFirst({
+        where: { id: customerId, companyId, isDeleted: false }
+    });
+
+    if (!existing) {
+        return c.json({ error: 'Customer not found' }, 404);
+    }
+
+    const deleted = await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+            isDeleted: true
+        }
+    });
+
+    return c.json({ data: { message: 'Customer deleted successfully' } });
+});
+
 export default customerRoutes;

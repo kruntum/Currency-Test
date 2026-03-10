@@ -34,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Ban, Building2, Loader2, ExternalLink, Users } from 'lucide-react';
+import { Plus, Pencil, Ban, Building2, Loader2, ExternalLink, Users, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -177,85 +177,87 @@ export default function CompanyPage() {
                 <p className="text-sm mt-1">กดปุ่ม "เพิ่มบริษัท" เพื่อเริ่มต้น</p>
               </div>
             ) : (
-              <div className="overflow-x-auto bg-card rounded-md border">
+              <div className="overflow-x-auto rounded-md">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">#</TableHead>
-                      <TableHead>ชื่อบริษัท</TableHead>
-                      <TableHead>เลขผู้เสียภาษี</TableHead>
-                      <TableHead>ที่อยู่</TableHead>
-                      <TableHead>เบอร์โทร</TableHead>
-                      <TableHead>สถานะ</TableHead>
-                      <TableHead>ผู้สร้าง</TableHead>
-                      <TableHead>วันที่สร้าง</TableHead>
-                      <TableHead className="text-right">จัดการ</TableHead>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="w-[50px] py-2 h-9 text-xs">#</TableHead>
+                      <TableHead className="py-2 h-9 text-xs">ชื่อบริษัท</TableHead>
+                      <TableHead className="py-2 h-9 text-xs">เลขผู้เสียภาษี</TableHead>
+                      <TableHead className="py-2 h-9 text-xs">ที่อยู่</TableHead>
+                      <TableHead className="py-2 h-9 text-xs">เบอร์โทร</TableHead>
+                      <TableHead className="py-2 h-9 text-xs text-center">สถานะ</TableHead>
+                      <TableHead className="py-2 h-9 text-xs">ผู้สร้าง</TableHead>
+                      <TableHead className="py-2 h-9 text-xs">วันที่สร้าง</TableHead>
+                      <TableHead className="py-2 h-9 text-xs text-right">จัดการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {companies.map((company, index) => (
-                      <TableRow key={company.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{company.name}</TableCell>
-                        <TableCell className="font-mono text-xs">
+                      <TableRow key={company.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="text-muted-foreground text-xs py-1.5 h-10">{index + 1}</TableCell>
+                        <TableCell className="font-medium text-sm py-1.5 h-10">{company.name}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground py-1.5 h-10">
                           {company.taxId || '-'}
                         </TableCell>
-                        <TableCell className="max-w-[200px] truncate text-sm">
+                        <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground py-1.5 h-10" title={company.address || ''}>
                           {company.address || '-'}
                         </TableCell>
-                        <TableCell className="text-sm">{company.phone || '-'}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-xs text-muted-foreground py-1.5 h-10">{company.phone || '-'}</TableCell>
+                        <TableCell className="py-1.5 h-10 text-center">
                           {company.status === 'active' ? (
-                            <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                              ใช้งาน
+                            <Badge variant="success" className="text-[10px] w-20 justify-center shadow-none gap-1 pl-1.5">
+                              <CheckCircle2 className="w-3 h-3" /> ใช้งาน
                             </Badge>
                           ) : (
-                            <Badge variant="destructive">ยกเลิก</Badge>
+                            <Badge variant="destructive" className="text-[10px] w-20 justify-center shadow-none gap-1 pl-1.5">
+                              <Ban className="w-3 h-3" /> ยกเลิก
+                            </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-xs text-muted-foreground py-1.5 h-10">
                           {company.user?.name || '-'}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        <TableCell className="text-xs text-muted-foreground py-1.5 h-10">
                           {format(new Date(company.createdAt), 'd MMM yyyy', { locale: th })}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right py-1.5 h-10">
                           <div className="flex items-center justify-end gap-1">
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="xs"
                               onClick={() => navigate(`/company/${company.id}`)}
-                              className="gap-1 text-primary"
+                              className="gap-1 text-primary h-7 text-[10px]"
                             >
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <ExternalLink className="h-3 w-3" />
                               เลือก
                             </Button>
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="xs"
                               onClick={() => handleOpenMembers(company)}
-                              className="gap-1 text-purple-600 hover:text-purple-700"
+                              className="gap-1 text-purple-600 hover:text-purple-700 h-7 text-[10px]"
                             >
-                              <Users className="h-3.5 w-3.5" />
+                              <Users className="h-3 w-3" />
                               ทีมงาน
                             </Button>
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="xs"
                               onClick={() => handleOpenEdit(company)}
-                              className="gap-1"
+                              className="gap-1 h-7 text-[10px]"
                             >
-                              <Pencil className="h-3.5 w-3.5" />
+                              <Pencil className="h-3 w-3" />
                               แก้ไข
                             </Button>
                             {company.status === 'active' && (
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="xs"
                                 onClick={() => handleOpenDelete(company)}
-                                className="gap-1 text-destructive hover:text-destructive"
+                                className="gap-1 text-destructive hover:text-destructive h-7 text-[10px]"
                               >
-                                <Ban className="h-3.5 w-3.5" />
+                                <Ban className="h-3 w-3" />
                                 ยกเลิก
                               </Button>
                             )}

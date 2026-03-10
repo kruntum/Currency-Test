@@ -8,6 +8,7 @@ import {
   ArrowDownToLine,
   Landmark,
   UserSquare2,
+  History,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Link, useLocation, useParams } from "react-router-dom"
 import { useSession } from "@/lib/auth-client"
+import { RoleProtect } from "@/components/role-protect"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
@@ -80,6 +82,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+            {companyId && (
+                <RoleProtect allowedRoles={['OWNER', 'ADMIN']}>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild isActive={location.pathname === `/company/${companyId}/audit-logs`} tooltip="ประวัติการแก้ไข">
+                            <Link to={`/company/${companyId}/audit-logs`}>
+                                <History />
+                                <span>ประวัติข้อมูล (Audit)</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </RoleProtect>
+            )}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

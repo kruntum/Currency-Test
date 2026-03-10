@@ -1,0 +1,41 @@
+# Currency-Test Agent Instructions
+
+You are an expert AI developer assisting with the `currency-test` project.
+Always follow these core principles:
+
+## 1. Project Context & Business Logic
+
+- Read `docs/payment-reconciliation.md` and `docs/AI_AGENT_GUIDELINES.md` before making any structural or business logic changes.
+- **CRITICAL**: The Treasury system operates on a **per-receipt FCY Wallet** basis. DO NOT pool foreign currency into average cost pools. Receipts have their own specific BOT rate when received.
+- **2-Layer FX**: Understand the difference between Accounting FX (Layer 1, calculated during `PaymentAllocation`) and Realized/Treasury FX (Layer 2, calculated during `ExchangeLog`).
+
+## 2. Authentication & Authorization Concept
+
+- **Better Auth Framework**: Used for global session management (`authMiddleware`).
+- **Company RBAC**: Uses the `CompanyUser` table to govern access control per company (`companyAuth`).
+- **Backend Standard**: Protected backend routes interacting with company data must ALWAYS utilize the `requireCompanyRole([...])` middleware and expect an active `companyId`.
+
+## 3. Tech Stack & Environment
+
+- **Frontend**: React 19, Vite, Tailwind CSS v4, Shadcn/Radix UI, Zustand.
+- **Backend**: Hono.js, Node.js, Prisma ORM, Zod, PostgreSQL.
+- Run project locally: `npm run dev` (uses concurrently for Vite and Hono).
+
+## 3. Database Rules (Prisma)
+
+- Check `prisma/schema.prisma` before modifying models.
+- **Decimal Fields**: Financial fields (amount, rate, THB) are `Decimal`. In JavaScript/TypeScript, Prisma returns them as `Decimal` objects, but they serialize to `string` in JSON. Your frontend Zustand stores/interfaces MUST type these as `string | number` to prevent runtime type mismatch errors.
+- **Prisma Where Clauses**: You CANNOT compare a column against another column strictly inside `where` (e.g., `receivedFcy: { gt: prisma.receipt.fields.exchangedFcy }`). Fetch data and filter in JS using `.filter()`, or use `$queryRaw` safely.
+
+## 4. UI/UX Style Guide
+
+- **Compact UI**: The user strongly prefers compact layouts. Use `h-7`, `text-xs`, and tight padding for form elements (Inputs, Selects, DatePickers, Comboboxes).
+- **Required Fields**: Required inputs should be highlighted. Use `inputClassName="bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50"` pattern to ensure visibility without stacking backgrounds. Avoid applying background directly to generic container wrappers (like DatePicker `div` wrappers) to prevent overlapping opacity issues.
+- **Dark Mode**: All styles must be tested/applied with `.dark` variants.
+- **Component Reusability & Shadcn UI (CRITICAL)**: Always reuse existing components first (check `src/components/ui/`). Do not reinvent the wheel. If a component is missing, use `npx shadcn-ui@latest add <component>` instead of building a custom implementation.
+
+## 5. Development Workflow
+
+- **Precision**: Look at actual user intent. If they say "make it compact", update the CSS to use smaller metrics.
+- **Testing**: Whenever modifying Hono routes or Zustand stores, test the entire flow (e.g., creating a transaction -> allocating -> exchanging).
+- **Communication**: When completing a task or encountering a blocker, leave an update. When starting a complex task, always create an `implementation_plan.md` first.

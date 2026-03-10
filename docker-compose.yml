@@ -22,7 +22,7 @@ services:
     container_name: currency-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4501:3000"
     depends_on:
       db:
         condition: service_healthy
@@ -33,6 +33,7 @@ services:
       BETTER_AUTH_URL: http://localhost:3000
       NODE_ENV: production
       PORT: 3000
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
     command: sh -c "npx prisma migrate deploy && node server-dist/index.js"
 
 volumes:

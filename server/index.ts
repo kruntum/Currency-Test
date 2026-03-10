@@ -14,13 +14,28 @@ import userRoutes from './routes/users';
 import customerRoutes from './routes/customers';
 import receiptRoutes from './routes/receipts';
 import treasuryRoutes from './routes/treasury';
+import allocationRoutes from './routes/allocations';
+import auditLogRoutes from './routes/audit-logs';
+import dashboardRoutes from './routes/dashboard';
 import type { AppEnv } from './types';
 
 const app = new Hono<AppEnv>();
 
-// CORS for development
+const baseOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'];
+const envOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : [];
+const allowedOrigins = Array.from(new Set([...baseOrigins, ...envOrigins]));
+
+// CORS for development - Allow specific origins from .env AND any ngrok-free.app for dynamic testing
 app.use('/api/*', cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'https://e18f-118-172-187-67.ngrok-free.app'],
+    origin: (origin) => {
+        if (!origin) return 'http://localhost:5173'; // Default fallback
+        if (allowedOrigins.includes(origin) || origin.endsWith('.ngrok-free.app')) {
+            return origin;
+        }
+        return 'http://localhost:5173';
+    },
     credentials: true,
 }));
 
@@ -54,6 +69,15 @@ app.route('/api/receipts', receiptRoutes);
 
 app.use('/api/treasury/*', authMiddleware);
 app.route('/api/treasury', treasuryRoutes);
+
+app.use('/api/allocations/*', authMiddleware);
+app.route('/api/allocations', allocationRoutes);
+
+app.use('/api/audit-logs/*', authMiddleware);
+app.route('/api/audit-logs', auditLogRoutes);
+
+app.use('/api/dashboard/*', authMiddleware);
+app.route('/api/dashboard', dashboardRoutes);
 
 // Admin-only routes
 app.use('/api/admin/*', authMiddleware, adminMiddleware);

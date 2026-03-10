@@ -89,31 +89,29 @@ export function ProductManagerDialog({ open, onOpenChange }: ProductManagerDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-4 py-4 shrink-0 border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                จัดการฐานข้อมูลสินค้า
-              </DialogTitle>
-              <DialogDescription className="mt-1">
-                รายชื่อสินค้าเหล่านี้จะถูกใช้ร่วมกันเป็น Autocomplete ในหน้าสร้างใบขนสินค้า (ใช้ร่วมกันทุกบริษัท)
-              </DialogDescription>
+          <DialogTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            จัดการฐานข้อมูลสินค้า
+          </DialogTitle>
+          <DialogDescription className="mt-1">
+            รายชื่อสินค้าเหล่านี้จะถูกใช้ร่วมกันเป็น Autocomplete ในหน้าสร้างใบขนสินค้า (ใช้ร่วมกันทุกบริษัท)
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="ค้นหาชื่อสินค้า..." 
+                className="pl-8"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
             <Button size="sm" onClick={handleCreate} className="gap-2">
               <Plus className="h-4 w-4" /> เพิ่มสินค้า
             </Button>
-          </div>
-        </DialogHeader>
-
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-4 space-y-4">
-          <div className="relative w-full max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="ค้นหาชื่อสินค้า..." 
-              className="pl-8"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
           </div>
 
           <div className="flex-1 overflow-auto rounded-md border min-h-0">
@@ -145,7 +143,7 @@ export function ProductManagerDialog({ open, onOpenChange }: ProductManagerDialo
                     <TableRow key={product.id}>
                       <TableCell className="text-center font-mono text-xs">{product.id}</TableCell>
                       <TableCell className="font-medium text-sm">{product.name}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{product.createdBy || 'System'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{product.user?.name || product.createdBy || 'System'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{product.createdAt}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">

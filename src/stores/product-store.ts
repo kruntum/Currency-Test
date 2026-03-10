@@ -7,6 +7,7 @@ export interface Product {
     createdBy: string;
     createdAt: string;
     updatedAt: string;
+    user?: { id: string; name: string };
 }
 
 interface ProductState {

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Shield, User, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Loader2, Shield, User, MoreHorizontal, Trash2, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -56,6 +56,13 @@ export default function UsersPage() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const perPage = 10;
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredUsers = searchQuery.trim()
+    ? users.filter((u) => u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    : users;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -79,21 +86,6 @@ export default function UsersPage() {
 
   useEffect(() => { fetchUsers(); }, []);
 
-  const changeRole = async (userId: string, newRole: string) => {
-    try {
-      await fetch(`/api/admin/users/${userId}/role`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ role: newRole }),
-      });
-      fetchUsers();
-      toast.success('อัปเดตบทบาทสำเร็จ');
-    } catch (err) {
-      console.error(err);
-      toast.error('เกิดข้อผิดพลาดในการเปลี่ยนบทบาท');
-    }
-  };
 
   const handleDeleteUser = async (userId: string) => {    try {
       const res = await fetch(`/api/admin/users/${userId}`, {
@@ -191,17 +183,28 @@ export default function UsersPage() {
       />
       <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-hidden">
 
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-muted/50 rounded-xl border shadow-sm">
-        <CardHeader className="shrink-0 pb-2 flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-lg flex items-center gap-2">
-            ผู้ใช้ทั้งหมด <Badge variant="secondary">{users.length}</Badge>
-          </CardTitle>
+        {/* Top bar: search + add button */}
+        <div className="flex items-center justify-between shrink-0">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="ค้นหาชื่อ หรืออีเมล..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            />
+          </div>
           <Button onClick={() => {
             setFormData({ name: '', email: '', password: '', role: 'user' });
             setIsAddOpen(true);
-          }}>
-            <Plus className="mr-2 h-4 w-4" /> เพิ่มผู้ใช้
+          }} className="gap-2">
+            <Plus className="h-4 w-4" /> เพิ่มผู้ใช้
           </Button>
+        </div>
+
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-muted/50 rounded-xl border shadow-sm">
+        <CardHeader className="shrink-0 pb-2">
+          <CardTitle className="text-lg">รายชื่อผู้ใช้ <span className="text-sm font-normal text-muted-foreground ml-2">{filteredUsers.length} คน</span></CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden flex flex-col min-h-0 pb-4">
           {loading ? (
@@ -209,64 +212,56 @@ export default function UsersPage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <div className="flex-1 overflow-auto bg-card rounded-md border min-h-0">
-              <table className="w-full text-sm">
-                <thead className="bg-background sticky top-0 z-10 shadow-sm">
+            <div className="flex-1 overflow-auto rounded-md min-h-0">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/30 sticky top-0 z-10">
                   <tr className="border-b">
-                    <th className="text-left py-2 px-3 font-medium">ชื่อ</th>
-                    <th className="text-left py-2 px-3 font-medium">อีเมล</th>
-                    <th className="text-center py-2 px-3 font-medium">บทบาท</th>
-                    <th className="text-center py-2 px-3 font-medium">จำนวนรายการ</th>
-                    <th className="text-center py-2 px-3 font-medium">เปลี่ยนบทบาท</th>
-                    <th className="text-center py-2 px-3 font-medium">จัดการ</th>
+                    <th className="w-12 text-center py-2 px-3 font-medium h-9 text-xs">#</th>
+                    <th className="text-left py-2 px-3 font-medium h-9 text-xs">ชื่อ</th>
+                    <th className="text-left py-2 px-3 font-medium h-9 text-xs">อีเมล</th>
+                    <th className="text-center py-2 px-3 font-medium h-9 text-xs">บทบาท</th>
+                    <th className="text-center py-2 px-3 font-medium h-9 text-xs">จำนวนรายการ</th>
+                    <th className="text-center py-2 px-3 font-medium h-9 text-xs">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
+                  {filteredUsers.slice((page - 1) * perPage, page * perPage).map((u, index) => (
                     <tr key={u.id} className="border-b hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-3 font-medium">{u.name}</td>
-                      <td className="py-2 px-3 text-muted-foreground">{u.email}</td>
-                      <td className="text-center py-2 px-3">
-                        <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="gap-1">
+                      <td className="text-center text-muted-foreground text-xs py-1.5 px-3 h-10">
+                        {(page - 1) * perPage + index + 1}
+                      </td>
+                      <td className="py-1.5 px-3 font-medium text-sm h-10">{u.name}</td>
+                      <td className="py-1.5 px-3 text-muted-foreground text-xs h-10">{u.email}</td>
+                      <td className="text-center py-1.5 px-3 h-10">
+                        <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="gap-1 text-[10px] shadow-none">
                           {u.role === 'admin' ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
                           {u.role}
                         </Badge>
                       </td>
-                      <td className="text-center py-2 px-3 font-mono">{u._count.transactions}</td>
-                      <td className="text-center py-1.5 px-3">
-                        <Select value={u.role} onValueChange={(v) => changeRole(u.id, v)}>
-                          <SelectTrigger className="w-[120px] mx-auto h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="user">User</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="text-center py-1.5 px-3">
+                      <td className="text-center py-1.5 px-3 h-10">{u._count.transactions}</td>
+                      <td className="text-center py-1.5 px-3 h-10">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button variant="ghost" className="h-6 w-6 p-0">
                               <span className="sr-only">เปิดเมนู</span>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>การจัดการ</DropdownMenuLabel>
-                            <DropdownMenuItem className="cursor-pointer" onClick={() => openEditModal(u)}>
-                              <Edit2 className="mr-2 h-4 w-4" />
+                            <DropdownMenuLabel className="text-xs">การจัดการ</DropdownMenuLabel>
+                            <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => openEditModal(u)}>
+                              <Edit2 className="mr-2 h-3.5 w-3.5" />
                               <span>แก้ไขข้อมูล</span>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              className="text-destructive focus:bg-destructive focus:text-destructive-foreground cursor-pointer"
+                              className="text-destructive focus:bg-destructive focus:text-destructive-foreground cursor-pointer text-xs"
                               onClick={() => {
                                 setUserToDelete(u.id);
                                 setIsDeleteConfirmOpen(true);
                               }}
                             >
-                              <Trash2 className="mr-2 h-4 w-4" />
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
                               <span>ลบผู้ใช้</span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -276,6 +271,32 @@ export default function UsersPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination Footer */}
+          {!loading && filteredUsers.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 pb-1 px-1 gap-4 mt-auto border-t">
+              <div className="text-sm text-muted-foreground">
+                รายการทั้งหมด <span className="font-medium text-foreground">{filteredUsers.length}</span> รายการ
+              </div>
+              {Math.ceil(filteredUsers.length / perPage) > 1 && (
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    หน้า <span className="font-medium text-foreground">{page}</span> จาก {Math.ceil(filteredUsers.length / perPage)}
+                  </p>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page <= 1}
+                      onClick={() => setPage(page - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page >= Math.ceil(filteredUsers.length / perPage)}
+                      onClick={() => setPage(page + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
