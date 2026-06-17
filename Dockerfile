@@ -9,6 +9,7 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 RUN npx esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=server-dist/index.js
+RUN npx esbuild prisma/seed.ts --bundle --platform=node --format=esm --packages=external --outfile=prisma/seed.js
 
 # Production stage
 FROM node:22-alpine AS runner
