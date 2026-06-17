@@ -28,7 +28,7 @@ const transactionSchema = z.object({
     exchangeRate: z.string().min(1),
     rateDate: z.string().min(1),
     rateSource: z.enum(['BOT', 'MANUAL', 'THB']).default('BOT'),
-    companyId: z.number(),
+    // companyId is intentionally excluded — always sourced from middleware
     customerId: z.number().optional().nullable(),
     notes: z.string().optional().nullable(),
     invoices: z.array(invoiceSchema).min(1, 'At least 1 invoice required'),
@@ -39,8 +39,8 @@ transactionRoutes.use('*', requireCompanyRole(['OWNER', 'ADMIN', 'FINANCE', 'DAT
 
 // GET /api/transactions - list with invoice counts
 transactionRoutes.get('/', async (c) => {
-    const page = parseInt(c.req.query('page') || '1');
-    const limit = parseInt(c.req.query('limit') || '30');
+    const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+    const limit = Math.min(500, Math.max(1, parseInt(c.req.query('limit') || '30')));
     // Using companyUser from middleware
     const companyUser = c.get('companyUser');
     const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
@@ -61,7 +61,11 @@ transactionRoutes.get('/', async (c) => {
         ];
     }
     if (paymentStatus) {
-        where.paymentStatus = paymentStatus;
+        if (paymentStatus.includes(',')) {
+            where.paymentStatus = { in: paymentStatus.split(',') };
+        } else {
+            where.paymentStatus = paymentStatus;
+        }
     }
     if (currencyCode) {
         where.currencyCode = currencyCode;
@@ -137,7 +141,12 @@ transactionRoutes.get('/:id', async (c) => {
 });
 
 // POST /api/transactions - create with nested invoices + items
-transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
+// POST — OWNER, ADMIN, DATA_ENTRY only (FINANCE excluded from writes)
+transactionRoutes.post('/', async (c) => {
+    const companyUser = c.get('companyUser');
+    if (!companyUser || !['OWNER', 'ADMIN', 'DATA_ENTRY'].includes(companyUser.role)) {
+        return c.json({ error: 'Forbidden: Insufficient role for this operation' }, 403);
+    }
     const user = c.get('user');
     const body = await c.req.json();
     const result = transactionSchema.safeParse(body);
@@ -147,6 +156,8 @@ transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'])
     }
 
     const data = result.data;
+    // SECURITY: Always use companyId from authenticated middleware, never from body
+    const companyId = companyUser!.companyId;
     const rate = parseFloat(data.exchangeRate);
 
     // Calculate totals
@@ -186,7 +197,7 @@ transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'])
             currencyCode: data.currencyCode,
             totalForeign: invForeign,
             totalThb: invThb,
-            companyId: data.companyId,
+            companyId,
             createdBy: user.id,
             items,
         };
@@ -204,7 +215,7 @@ transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'])
             thbAmount: totalThb,
             rateDate: new Date(data.rateDate),
             rateSource: data.rateSource,
-            companyId: data.companyId,
+            companyId,
             customerId: data.customerId || null,
             createdBy: user.id,
             notes: data.notes || null,
@@ -233,7 +244,7 @@ transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'])
 
     // Log the creation
     await logAuditData({
-        companyId: data.companyId,
+        companyId,
         userId: user.id,
         action: 'CREATE_TRANSACTION',
         entity: 'TRANSACTION',
@@ -250,7 +261,12 @@ transactionRoutes.post('/', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'])
 });
 
 // PUT /api/transactions/:id - update (replace invoices + items)
-transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
+// PUT — OWNER, ADMIN, DATA_ENTRY only
+transactionRoutes.put('/:id', async (c) => {
+    const companyUserCtx = c.get('companyUser');
+    if (!companyUserCtx || !['OWNER', 'ADMIN', 'DATA_ENTRY'].includes(companyUserCtx.role)) {
+        return c.json({ error: 'Forbidden: Insufficient role for this operation' }, 403);
+    }
     const id = parseInt(c.req.param('id'));
     const companyUser = c.get('companyUser');
     const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
@@ -265,6 +281,10 @@ transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'
 
     const existing = await prisma.transaction.findUnique({ where: { id } });
     if (!existing || existing.companyId !== companyId) return c.json({ error: 'Not found' }, 404);
+
+    if (existing.paymentStatus !== 'PENDING' || existing.paidThb.toNumber() > 0) {
+        return c.json({ error: 'Cannot edit transaction because it is already allocated/paid. Please reverse the allocations first.' }, 400);
+    }
 
     const data = result.data;
     const rate = parseFloat(data.exchangeRate);
@@ -305,7 +325,7 @@ transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'
             currencyCode: data.currencyCode,
             totalForeign: invForeign,
             totalThb: invThb,
-            companyId: data.companyId,
+            companyId,
             createdBy: user.id,
             items,
         };
@@ -367,7 +387,7 @@ transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'
 
     // Log the update
     await logAuditData({
-        companyId: data.companyId,
+        companyId,
         userId: user.id,
         action: 'UPDATE_TRANSACTION',
         entity: 'TRANSACTION',
@@ -389,8 +409,12 @@ transactionRoutes.put('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY'
     return c.json({ data: tx });
 });
 
-// DELETE /api/transactions/:id - cascade delete
-transactionRoutes.delete('/:id', requireCompanyRole(['OWNER', 'ADMIN', 'DATA_ENTRY']), async (c) => {
+// DELETE — OWNER, ADMIN, DATA_ENTRY only
+transactionRoutes.delete('/:id', async (c) => {
+    const companyUserCtx = c.get('companyUser');
+    if (!companyUserCtx || !['OWNER', 'ADMIN', 'DATA_ENTRY'].includes(companyUserCtx.role)) {
+        return c.json({ error: 'Forbidden: Insufficient role for this operation' }, 403);
+    }
     const id = parseInt(c.req.param('id'));
     const companyUser = c.get('companyUser');
     const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);

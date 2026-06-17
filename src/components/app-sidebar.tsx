@@ -29,6 +29,7 @@ import { Link, useLocation, useParams } from "react-router-dom"
 import { useSession } from "@/lib/auth-client"
 import { RoleProtect } from "@/components/role-protect"
 
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
   const { companyId } = useParams()
@@ -36,15 +37,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'admin'
 
   // Company-scoped navigation items
-  const navItems = companyId
+  const navItems: { title: string; url: string; icon: React.ComponentType<any>; allowedRoles?: string[]; exact?: boolean }[] = companyId
     ? [
-        { title: "แดชบอร์ด", url: `/company/${companyId}`, icon: LayoutDashboard },
+        { title: "แดชบอร์ด", url: `/company/${companyId}`, icon: LayoutDashboard, allowedRoles: ["OWNER", "ADMIN", "FINANCE"], exact: true },
         { title: "ลูกค้า", url: `/company/${companyId}/customers`, icon: UserSquare2 },
         { title: "รายการ (Transactions)", url: `/company/${companyId}/transactions`, icon: FileText },
-        { title: "ลูกหนี้คงค้าง", url: `/company/${companyId}/outstanding`, icon: Users },
+        { title: "ลูกหนี้คงค้าง", url: `/company/${companyId}/outstanding`, icon: Users, allowedRoles: ["OWNER", "ADMIN", "FINANCE"] },
         { title: "รับเงิน", url: `/company/${companyId}/receipts`, icon: ArrowDownToLine },
-        { title: "คลัง (FCD)", url: `/company/${companyId}/treasury`, icon: Landmark },
-        { title: "บริษัท", url: "/companies", icon: Building2 },
+        { title: "คลัง (FCD)", url: `/company/${companyId}/treasury`, icon: Landmark, allowedRoles: ["OWNER", "ADMIN", "FINANCE"] },
         ...(isAdmin ? [
           { title: "ผู้ใช้", url: "/admin/users", icon: Users },
           { title: "สกุลเงิน", url: "/admin/currencies", icon: Coins },
@@ -56,7 +56,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           { title: "ผู้ใช้", url: "/admin/users", icon: Users },
           { title: "สกุลเงิน", url: "/admin/currencies", icon: Coins },
         ] : []),
-      ]
+      ];
 
   const userStub = {
     name: session?.user?.name || "User",
@@ -73,16 +73,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup>
           <SidebarGroupLabel>เมนูหลัก</SidebarGroupLabel>
           <SidebarMenu>
-            {navItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild isActive={location.pathname === item.url} tooltip={item.title}>
-                  <Link to={item.url}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
+            {navItems.map((item) => {
+              const content = (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={item.exact ? location.pathname === item.url : (item.url === '/' ? location.pathname === item.url : location.pathname.startsWith(item.url))} tooltip={item.title}>
+                    <Link to={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+
+              if (item.allowedRoles) {
+                return (
+                  <RoleProtect key={item.title} allowedRoles={item.allowedRoles}>
+                    {content}
+                  </RoleProtect>
+                );
+              }
+
+              return content;
+            })}
             {companyId && (
                 <RoleProtect allowedRoles={['OWNER', 'ADMIN']}>
                     <SidebarMenuItem>

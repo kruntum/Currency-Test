@@ -39,6 +39,7 @@ interface CompanyState {
     deleteCompany: (id: number) => Promise<void>;
 
     companyMembers: Record<number, CompanyUser[]>; // mapped by companyId
+    loadingMembers: Record<number, boolean>; // mapped by companyId
     fetchCompanyUsers: (companyId: number) => Promise<void>;
     addCompanyUser: (companyId: number, email: string, role: string) => Promise<void>;
     updateCompanyUser: (companyId: number, userId: string, role: string) => Promise<void>;
@@ -109,8 +110,18 @@ export const useCompanyStore = create<CompanyState>((set, get) => ({
     },
 
     companyMembers: {},
+    loadingMembers: {},
 
     fetchCompanyUsers: async (companyId) => {
+        if (get().loadingMembers[companyId]) return;
+
+        set((state) => ({
+            loadingMembers: {
+                ...state.loadingMembers,
+                [companyId]: true
+            }
+        }));
+
         try {
             const res = await fetch(`/api/companies/${companyId}/users`, { credentials: 'include' });
             if (!res.ok) throw new Error('Failed to fetch members');
@@ -123,6 +134,20 @@ export const useCompanyStore = create<CompanyState>((set, get) => ({
             }));
         } catch (err) {
             console.error(err);
+            // On failure, set to empty array to prevent infinite retry loop
+            set((state) => ({
+                companyMembers: {
+                    ...state.companyMembers,
+                    [companyId]: []
+                }
+            }));
+        } finally {
+            set((state) => ({
+                loadingMembers: {
+                    ...state.loadingMembers,
+                    [companyId]: false
+                }
+            }));
         }
     },
 

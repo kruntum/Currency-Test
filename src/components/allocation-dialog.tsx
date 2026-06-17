@@ -90,10 +90,16 @@ export function AllocationDialog({ open, onOpenChange, companyId, receipt, onSuc
     const txRate = parseFloat(tx.exchangeRate.toString());
     const botRate = parseFloat(receipt.receivedBotRate.toString());
     
-    // We assume Equivalent FCY * botRate is what we apply
-    const fcyNeeded = unpaidInvoiceThb / txRate;
-    let appliedThbNeeded = fcyNeeded * botRate;
+    let appliedThbNeeded = unpaidInvoiceThb;
     let toInvoiceThb = unpaidInvoiceThb;
+
+    // Only perform cross-rate conversion if receipt and transaction have matching currencies (e.g. USD to USD).
+    // If they have different currencies (e.g. USD receipt paying CNY invoice), they both already converted to THB.
+    // Therefore, we allocate them 1-to-1 in THB (appliedThb = invoiceThb) without double-converting.
+    if (tx.currencyCode === receipt.currencyCode) {
+      const fcyNeeded = unpaidInvoiceThb / txRate;
+      appliedThbNeeded = fcyNeeded * botRate;
+    }
 
     // Can we fulfill it? Check against remaining THB bucket.
     const currentApplied = parseFloat(allocations[tx.id]?.appliedThb) || 0;
@@ -102,8 +108,12 @@ export function AllocationDialog({ open, onOpenChange, companyId, receipt, onSuc
     if (appliedThbNeeded > actualRemaining) {
         // Only partial fulfill
         appliedThbNeeded = actualRemaining;
-        const fcyCanPay = appliedThbNeeded / botRate;
-        toInvoiceThb = fcyCanPay * txRate;
+        if (tx.currencyCode === receipt.currencyCode) {
+            const fcyCanPay = appliedThbNeeded / botRate;
+            toInvoiceThb = fcyCanPay * txRate;
+        } else {
+            toInvoiceThb = actualRemaining;
+        }
     }
 
     handleAllocateChange(tx.id, 'appliedThb', appliedThbNeeded.toFixed(2));
@@ -122,6 +132,20 @@ export function AllocationDialog({ open, onOpenChange, companyId, receipt, onSuc
     if (allocsToSubmit.length === 0) {
       toast.error('ไม่มีรายการตัดชำระ');
       return;
+    }
+
+    // Validation: check if invoiceThb exceeds outstanding unpaid THB
+    for (const alloc of allocsToSubmit) {
+      const tx = pendingTxs.find(t => t.id === alloc.transactionId);
+      if (tx) {
+        const invoiceTotalThb = parseFloat(tx.thbAmount);
+        const paidThb = parseFloat(tx.paidThb?.toString() || '0');
+        const unpaidThb = invoiceTotalThb - paidThb;
+        if (alloc.invoiceThb > unpaidThb + 0.01) {
+          toast.error(`ยอดหักใบขนของใบขนเลขที่ ${tx.declarationNumber} (฿${formatNumber(alloc.invoiceThb, 2)}) เกินยอดค้างชำระ (฿${formatNumber(unpaidThb, 2)})`);
+          return;
+        }
+      }
     }
 
     if (totalAppliedThb > availableThb + 0.01) {
@@ -232,7 +256,12 @@ export function AllocationDialog({ open, onOpenChange, companyId, receipt, onSuc
                   return (
                     <TableRow key={tx.id} className="hover:bg-slate-50/50 transition-colors group dark:hover:bg-slate-900/50 border-b-slate-100 dark:border-b-slate-800/60">
                       <TableCell className="py-2">
-                        <div className="font-semibold text-sm text-slate-800 dark:text-slate-200">{tx.declarationNumber}</div>
+                        <div className="font-semibold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          {tx.declarationNumber}
+                          <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md font-medium">
+                            {tx.currencyCode}
+                          </span>
+                        </div>
                         <div className="text-[10px] font-medium text-slate-500 mt-0.5 flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                           ค้างชำระ: ฿{formatNumber(unpaidThb, 2)}

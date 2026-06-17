@@ -129,13 +129,11 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     },
 
     fetchPendingTransactions: async (companyId, customerId) => {
-        const res = await fetch(`/api/transactions?companyId=${companyId}&search=&paymentStatus=PENDING&limit=100`, { credentials: 'include' });
-        const resPartial = await fetch(`/api/transactions?companyId=${companyId}&search=&paymentStatus=PARTIAL&limit=100`, { credentials: 'include' });
-
-        const data1 = res.ok ? (await res.json()).data : [];
-        const data2 = resPartial.ok ? (await resPartial.json()).data : [];
-
-        return [...data1, ...data2].filter(t => t.customerId === customerId);
+        // Pass customerId to the API to avoid client-side truncation when >100 records exist.
+        // Limit is increased to 1000 and combined statuses are fetched in 1 request to optimize load.
+        const baseParams = `companyId=${companyId}&customerId=${customerId}&limit=1000&paymentStatus=PENDING,PARTIAL`;
+        const res = await fetch(`/api/transactions?${baseParams}`, { credentials: 'include' });
+        return res.ok ? (await res.json()).data : [];
     },
 
     fetchTransaction: async (id: number) => {

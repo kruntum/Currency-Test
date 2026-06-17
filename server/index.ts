@@ -27,14 +27,12 @@ const envOrigins = process.env.ALLOWED_ORIGINS
     : [];
 const allowedOrigins = Array.from(new Set([...baseOrigins, ...envOrigins]));
 
-// CORS for development - Allow specific origins from .env AND any ngrok-free.app for dynamic testing
+// CORS — Only explicitly allowed origins. Set NGROK_ORIGIN=https://abc.ngrok-free.app in .env for tunneling.
 app.use('/api/*', cors({
     origin: (origin) => {
-        if (!origin) return 'http://localhost:5173'; // Default fallback
-        if (allowedOrigins.includes(origin) || origin.endsWith('.ngrok-free.app')) {
-            return origin;
-        }
-        return 'http://localhost:5173';
+        if (!origin) return 'http://localhost:5173'; // server-to-server
+        if (allowedOrigins.includes(origin)) return origin;
+        return 'http://localhost:5173'; // reject unknown origins silently
     },
     credentials: true,
 }));

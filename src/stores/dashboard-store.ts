@@ -11,6 +11,7 @@ export interface DashboardStats {
     topCustomers: { name: string; gain: number }[];
     currentExposure: { currencyCode: string; balanceFcy: number; avgCostRate: number; estimatedThbValue: number }[];
     totalFcdValueThb: number;
+    totalUnpaidCount: number;
     unpaidInvoices: {
         id: number;
         invoiceNumber: string;

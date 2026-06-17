@@ -14,21 +14,21 @@ treasuryRoutes.get('/fcd', async (c) => {
     const companyUser = c.get('companyUser');
     const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
 
-    // Fetch all receipts for this company, then filter in JS
-    // (Prisma does not support field-to-field comparison in where clauses)
-    const allReceipts = await prisma.receipt.findMany({
-        where: { companyId },
+    // Optimize: Fetch only active receipt IDs from DB where receivedFcy > exchangedFcy
+    const activeReceipts = await prisma.$queryRaw<{ id: number }[]>`
+        SELECT id FROM receipts 
+        WHERE company_id = ${companyId} AND received_fcy > exchanged_fcy
+    `;
+    const activeIds = activeReceipts.map(r => r.id);
+
+    const fcdWallets = await prisma.receipt.findMany({
+        where: {
+            id: { in: activeIds }
+        },
         include: {
             customer: { select: { name: true } }
         },
         orderBy: { receivedDate: 'asc' }
-    });
-
-    // Filter: only receipts that still have unexchanged FCY
-    const fcdWallets = allReceipts.filter(r => {
-        const received = new Decimal(r.receivedFcy.toString());
-        const exchanged = new Decimal(r.exchangedFcy.toString());
-        return received.greaterThan(exchanged);
     });
 
     // Map to the expected frontend format but include receiptId
@@ -145,6 +145,42 @@ treasuryRoutes.post('/exchange', async (c) => {
     });
 
     return c.json({ data: result }, 201);
+});
+
+// DELETE /api/treasury/exchange/:id — Reverse an exchange log
+treasuryRoutes.delete('/exchange/:id', async (c) => {
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser!.companyId;
+    const id = parseInt(c.req.param('id'));
+
+    if (isNaN(id)) return c.json({ error: 'Invalid exchange log ID' }, 400);
+
+    const log = await prisma.exchangeLog.findUnique({
+        where: { id },
+        include: { receipt: true },
+    });
+
+    if (!log) return c.json({ error: 'Exchange log not found' }, 404);
+    if (log.companyId !== companyId) return c.json({ error: 'Forbidden' }, 403);
+
+    await prisma.$transaction(async (tx) => {
+        // 1. Restore exchangedFcy on the receipt
+        if (log.receiptId && log.receipt) {
+            const currentExchanged = new Decimal(log.receipt.exchangedFcy.toString());
+            const amountFcy = new Decimal(log.amountFcy.toString());
+            const newExchanged = Decimal.max(0, currentExchanged.minus(amountFcy));
+
+            await tx.receipt.update({
+                where: { id: log.receiptId },
+                data: { exchangedFcy: newExchanged.toNumber() },
+            });
+        }
+
+        // 2. Delete the exchange log
+        await tx.exchangeLog.delete({ where: { id } });
+    });
+
+    return c.json({ success: true });
 });
 
 export default treasuryRoutes;

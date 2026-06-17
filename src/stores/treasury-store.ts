@@ -14,6 +14,7 @@ export interface FCDWallet {
 export interface ExchangeLog {
     id: number;
     companyId: number;
+    receiptId: number | null;
     currencyCode: string;
     amountFcy: number;
     actualBankRate: number;
@@ -23,7 +24,8 @@ export interface ExchangeLog {
     exchangedDate: string;
     currency?: { symbol: string; };
     receipt?: {
-        customer: { name: string; }
+        customer: { name: string; };
+        bankReference?: string | null;
     };
 }
 
@@ -35,7 +37,8 @@ interface TreasuryState {
 
     fetchPools: (companyId: number) => Promise<void>;
     fetchLogs: (companyId: number) => Promise<void>;
-    exchangeFcy: (data: Record<string, any>) => Promise<void>;
+    exchangeFcy: (data: Record<string, unknown>) => Promise<void>;
+    reverseExchange: (logId: number, companyId: number) => Promise<void>;
 }
 
 export const useTreasuryStore = create<TreasuryState>((set, get) => ({
@@ -87,8 +90,21 @@ export const useTreasuryStore = create<TreasuryState>((set, get) => ({
 
         // Refresh data
         if (data.companyId) {
-            await get().fetchPools(data.companyId);
-            await get().fetchLogs(data.companyId);
+            await get().fetchPools(data.companyId as number);
+            await get().fetchLogs(data.companyId as number);
         }
-    }
+    },
+
+    reverseExchange: async (logId, companyId) => {
+        const res = await fetch(`/api/treasury/exchange/${logId}?companyId=${companyId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to reverse exchange');
+        }
+        await get().fetchPools(companyId);
+        await get().fetchLogs(companyId);
+    },
 }));

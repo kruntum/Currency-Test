@@ -347,9 +347,6 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     อินวอย <Badge variant="secondary" className="text-xs">{invoices.length}</Badge>
                   </p>
-                  <Button variant="ghost" size="sm" onClick={addInvoice} className="gap-1 h-7 text-xs">
-                    <Plus className="h-3 w-3" /> เพิ่มอินวอย
-                  </Button>
                 </div>
 
                 {invoices.map((inv, idx) => (

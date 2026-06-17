@@ -1,42 +1,61 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useReceiptStore } from '@/stores/receipt-store';
+import { useCustomerStore } from '@/stores/customer-store';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { ReceiptDialog } from '@/components/receipt-dialog';
 import { AllocationDialog } from '@/components/allocation-dialog';
+import { AllocationHistoryDialog } from '@/components/allocation-history-dialog';
 import { type Receipt } from '@/stores/receipt-store';
-import { Plus, Loader2, CheckCircle2, CircleDashed, Clock, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Loader2, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { formatNumber } from '@/lib/utils';
+import { RoleProtect } from '@/components/role-protect';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PaymentStatusBadge } from '@/components/payment-status-badge';
+import { CurrencyBadge } from '@/components/currency-badge';
 
 export default function ReceiptPage() {
   const { companyId } = useParams();
   const cId = parseInt(companyId || '0');
   
-  const { receipts, loading, fetchReceipts } = useReceiptStore();
+  const { receipts, loading, fetchReceipts, deleteAllocation } = useReceiptStore();
+  const { fetchCustomers } = useCustomerStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [allocationOpen, setAllocationOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(30);
 
   useEffect(() => {
+    if (selectedReceipt) {
+      const updated = receipts.find(r => r.id === selectedReceipt.id);
+      if (updated) {
+        setSelectedReceipt(updated);
+      } else {
+        setSelectedReceipt(null);
+        setHistoryOpen(false);
+      }
+    }
+  }, [receipts, selectedReceipt?.id]);
+
+  useEffect(() => {
     if (cId) {
       fetchReceipts(cId);
+      fetchCustomers(cId);
     }
-  }, [cId, fetchReceipts]);
+  }, [cId, fetchReceipts, fetchCustomers]);
 
   const filteredReceipts = searchQuery.trim()
     ? receipts.filter((r) =>
@@ -46,7 +65,6 @@ export default function ReceiptPage() {
       )
     : receipts;
 
-  const totalPages = Math.ceil(filteredReceipts.length / perPage);
   const pagedReceipts = filteredReceipts.slice((page - 1) * perPage, page * perPage);
 
   const handleSaved = () => {
@@ -58,6 +76,23 @@ export default function ReceiptPage() {
     setAllocationOpen(true);
   };
 
+  const handleOpenHistory = (receipt: Receipt) => {
+    setSelectedReceipt(receipt);
+    setHistoryOpen(true);
+  };
+
+  const handleRemoveAllocation = async (allocId: number) => {
+    if (window.confirm('คุณต้องการยกเลิกการตัดชำระของใบขนนี้ใช่หรือไม่?\nยอดค้างชำระของใบขนและยอดใน Receipt จะถูกดึงกลับคืนมา')) {
+      try {
+        await deleteAllocation(allocId, cId);
+        toast.success('ยกเลิกการตัดชำระสำเร็จ');
+        fetchReceipts(cId);
+      } catch (err: any) {
+        toast.error(err.message || 'เกิดข้อผิดพลาดในการยกเลิก');
+      }
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">
       <PageHeader title="รับเงิน (Receipts)" description="บันทึกยอดชำระจากต่างประเทศและตัดยอดใบขน" />
@@ -65,19 +100,18 @@ export default function ReceiptPage() {
       <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-hidden">
         {/* Top bar: search + add button */}
         <div className="flex items-center justify-between shrink-0">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="ค้นหาลูกค้า, อ้างอิงธนาคาร, สกุลเงิน..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-            />
-          </div>
-          <Button onClick={() => setDialogOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            บันทึกรับเงิน
-          </Button>
+          <SearchInput
+            className="max-w-sm flex-1"
+            placeholder="ค้นหาลูกค้า, อ้างอิงธนาคาร, สกุลเงิน..."
+            value={searchQuery}
+            onChange={(val) => { setSearchQuery(val); setPage(1); }}
+          />
+          <RoleProtect allowedRoles={['OWNER', 'ADMIN', 'FINANCE']}>
+            <Button onClick={() => setDialogOpen(true)} className="gap-2 h-7 text-xs">
+              <Plus className="h-3.5 w-3.5" />
+              บันทึกรับเงิน
+            </Button>
+          </RoleProtect>
         </div>
 
         <Card className="flex-1 flex flex-col overflow-hidden min-h-0 bg-muted/50 rounded-xl border shadow-sm">
@@ -90,10 +124,10 @@ export default function ReceiptPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : filteredReceipts.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>{searchQuery.trim() ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีประวัติการรับเงิน'}</p>
-              </div>
+              <EmptyState
+                icon={Search}
+                title={searchQuery.trim() ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีประวัติการรับเงิน'}
+              />
             ) : (
               <div className="flex-1 overflow-auto rounded-md min-h-0">
                 <Table>
@@ -107,7 +141,7 @@ export default function ReceiptPage() {
                       <TableHead className="py-2 h-9 text-xs font-medium text-right">ยอดรับ (FCY)</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium text-right">ยอดรับ (THB)</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium text-center">สถานะตัดชำระ</TableHead>
-                      <TableHead className="py-2 h-9 text-xs font-medium text-right w-[80px]">จัดการ</TableHead>
+                      <TableHead className="py-2 h-9 text-xs font-medium text-right w-[130px]">จัดการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -126,12 +160,7 @@ export default function ReceiptPage() {
                           {rcpt.bankReference || '-'}
                         </TableCell>
                         <TableCell className="py-1.5 h-10">
-                          <div className="flex items-center gap-1.5">
-                            <span className="flex items-center justify-center w-[18px] h-[18px] rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[9px] font-bold text-slate-600 dark:text-slate-300 shadow-xs">
-                              {rcpt.currency?.symbol || rcpt.currencyCode.substring(0,1)}
-                            </span>
-                            <span className="text-xs font-medium">{rcpt.currencyCode}</span>
-                          </div>
+                          <CurrencyBadge code={rcpt.currencyCode} symbol={rcpt.currency?.symbol} />
                         </TableCell>
                         <TableCell className="text-right py-1.5 h-10">
                           <div className="flex flex-col items-end">
@@ -145,33 +174,43 @@ export default function ReceiptPage() {
                           <div className="font-medium text-sm text-primary">
                             ฿{formatNumber(rcpt.receivedThb, 2)}
                           </div>
-                          {rcpt.allocatedThb > 0 && (
-                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal mt-0.5">
-                              ตัดแล้ว: ฿{formatNumber(rcpt.allocatedThb, 2)}
-                            </div>
+                          {Number(rcpt.allocatedThb) > 0 && (
+                            <button
+                               onClick={() => handleOpenHistory(rcpt)}
+                               className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5 hover:underline flex items-center gap-0.5 justify-end ml-auto transition-all"
+                             >
+                               ตัดแล้ว: ฿{formatNumber(rcpt.allocatedThb, 2)}
+                             </button>
                           )}
                         </TableCell>
                         <TableCell className="text-center py-1.5 h-10">
-                          <Badge 
-                            variant={rcpt.status === 'FULLY_ALLOCATED' ? 'success' : rcpt.status === 'PARTIAL' ? 'warning' : 'secondary'} 
-                            className="text-[10px] w-20 justify-center shadow-none gap-1 pl-1.5"
-                          >
-                            {rcpt.status === 'FULLY_ALLOCATED' && <CheckCircle2 className="w-3 h-3" />}
-                            {rcpt.status === 'PARTIAL' && <CircleDashed className="w-3 h-3" />}
-                            {rcpt.status === 'PENDING' && <Clock className="w-3 h-3" />}
-                            {rcpt.status === 'FULLY_ALLOCATED' ? 'PAID' : rcpt.status}
-                          </Badge>
+                          <PaymentStatusBadge status={rcpt.status} />
                         </TableCell>
                         <TableCell className="text-right py-1.5 h-10">
-                          <Button 
-                            variant="default" 
-                            size="xs" 
-                            className="h-6 text-xs shadow-sm"
-                            disabled={rcpt.status === 'FULLY_ALLOCATED'}
-                            onClick={() => handleOpenAllocation(rcpt)}
-                          >
-                            ตัดชำระ
-                          </Button>
+                          <div className="flex justify-end gap-1.5">
+                             {rcpt.status !== 'FULLY_ALLOCATED' && (
+                               <RoleProtect allowedRoles={['OWNER', 'ADMIN', 'FINANCE']}>
+                                 <Button 
+                                   variant="default" 
+                                   size="xs" 
+                                   className="h-6 text-[10px] px-2 shadow-sm"
+                                   onClick={() => handleOpenAllocation(rcpt)}
+                                 >
+                                   ตัดชำระ
+                                 </Button>
+                               </RoleProtect>
+                             )}
+                             {rcpt.allocations && rcpt.allocations.length > 0 && (
+                               <Button 
+                                 variant="outline" 
+                                 size="xs" 
+                                 className="h-6 text-[10px] px-2 text-slate-600 dark:text-slate-300 shadow-sm"
+                                 onClick={() => handleOpenHistory(rcpt)}
+                               >
+                                 ประวัติ
+                               </Button>
+                             )}
+                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -180,46 +219,14 @@ export default function ReceiptPage() {
               </div>
             )}
 
-            {/* Pagination Footer */}
             {!loading && filteredReceipts.length > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between pt-4 pb-1 px-1 gap-4 mt-auto border-t">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">
-                    รายการทั้งหมด <span className="font-medium text-foreground">{filteredReceipts.length}</span> รายการ
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-muted-foreground">แสดง</span>
-                    <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
-                      <SelectTrigger className="w-[70px] h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30">30</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <span className="text-xs text-muted-foreground">รายการ</span>
-                  </div>
-                </div>
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm text-muted-foreground">
-                      หน้า <span className="font-medium text-foreground">{page}</span> จาก {totalPages}
-                    </p>
-                    <div className="flex gap-1">
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page <= 1}
-                        onClick={() => setPage(page - 1)}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page >= totalPages}
-                        onClick={() => setPage(page + 1)}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <DataTablePagination
+                total={filteredReceipts.length}
+                page={page}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={(v) => { setPage(1); setPerPage(v); }}
+              />
             )}
           </CardContent>
         </Card>
@@ -240,6 +247,13 @@ export default function ReceiptPage() {
         onOpenChange={setAllocationOpen}
         receipt={selectedReceipt}
         onSuccess={handleSaved}
+      />
+
+      <AllocationHistoryDialog
+         open={historyOpen}
+         onOpenChange={setHistoryOpen}
+         receipt={selectedReceipt}
+         onRemoveAllocation={handleRemoveAllocation}
       />
     </div>
   );

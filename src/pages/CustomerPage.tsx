@@ -10,7 +10,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -19,8 +19,11 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, Users, Loader2, Save, MoreHorizontal, Pencil, Ban, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Users, Loader2, Save, MoreHorizontal, Pencil, Ban } from 'lucide-react';
 import { toast } from 'sonner';
+import { SearchInput } from '@/components/ui/search-input';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { EmptyState } from '@/components/ui/empty-state';
 
 export default function CustomerPage() {
   const { companyId } = useParams();
@@ -131,15 +134,12 @@ export default function CustomerPage() {
       <div className="flex-1 flex flex-col space-y-4 p-4 min-h-0 overflow-hidden">
         {/* Top bar: search + add button */}
         <div className="flex items-center justify-between shrink-0">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="ค้นหาชื่อลูกค้า หรือ Tax ID..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-            />
-          </div>
+          <SearchInput
+            className="max-w-sm flex-1"
+            placeholder="ค้นหาชื่อลูกค้า หรือ Tax ID..."
+            value={searchQuery}
+            onChange={(val) => { setSearchQuery(val); setPage(1); }}
+          />
           <Button onClick={handleOpenAdd} className="gap-2">
             <Plus className="h-4 w-4" />
             เพิ่มลูกค้าใหม่
@@ -156,15 +156,18 @@ export default function CustomerPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : filteredCustomers.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>{searchQuery.trim() ? 'ไม่พบลูกค้าที่ค้นหา' : 'ยังไม่มีข้อมูลลูกค้าสำหรับบริษัทนี้'}</p>
-                {!searchQuery.trim() && (
-                  <Button variant="link" onClick={handleOpenAdd}>
-                    คลิกที่นี่เพื่อเพิ่มลูกค้าคนแรก
-                  </Button>
-                )}
-              </div>
+              <EmptyState
+                icon={Users}
+                title={searchQuery.trim() ? 'ไม่พบลูกค้าที่ค้นหา' : 'ยังไม่มีข้อมูลลูกค้าสำหรับบริษัทนี้'}
+                action={
+                  !searchQuery.trim() ? (
+                    <Button variant="outline" className="gap-2" onClick={handleOpenAdd}>
+                      <Plus className="h-4 w-4" />
+                      คลิกที่นี่เพื่อเพิ่มลูกค้าคนแรก
+                    </Button>
+                  ) : undefined
+                }
+              />
             ) : (
               <div className="flex-1 overflow-auto rounded-md min-h-0">
                 <Table>
@@ -218,30 +221,13 @@ export default function CustomerPage() {
               </div>
             )}
 
-            {/* Pagination Footer */}
             {!loading && filteredCustomers.length > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between pt-4 pb-1 px-1 gap-4 mt-auto border-t">
-                <div className="text-sm text-muted-foreground">
-                  รายการทั้งหมด <span className="font-medium text-foreground">{filteredCustomers.length}</span> รายการ
-                </div>
-                {Math.ceil(filteredCustomers.length / perPage) > 1 && (
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm text-muted-foreground">
-                      หน้า <span className="font-medium text-foreground">{page}</span> จาก {Math.ceil(filteredCustomers.length / perPage)}
-                    </p>
-                    <div className="flex gap-1">
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page <= 1}
-                        onClick={() => setPage(page - 1)}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page >= Math.ceil(filteredCustomers.length / perPage)}
-                        onClick={() => setPage(page + 1)}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <DataTablePagination
+                total={filteredCustomers.length}
+                page={page}
+                perPage={perPage}
+                onPageChange={setPage}
+              />
             )}
           </CardContent>
         </Card>
@@ -252,12 +238,16 @@ export default function CustomerPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingCustomer ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}</DialogTitle>
+            <DialogDescription>
+              {editingCustomer ? 'แก้ไขข้อมูลติดต่อและรายละเอียดของลูกค้า' : 'กรอกรายละเอียดเพื่อสร้างข้อมูลลูกค้าใหม่'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>ชื่อลูกค้า *</Label>
               <Input 
+                className="bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50"
                 value={name} 
                 onChange={e => setName(e.target.value)} 
                 placeholder="ระบุชื่อหรือบริษัทลูกค้า" 

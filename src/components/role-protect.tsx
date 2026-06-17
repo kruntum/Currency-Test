@@ -1,5 +1,6 @@
 import React from 'react';
 import { useRole } from '@/hooks/use-role';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface RoleProtectProps {
   allowedRoles: string[];
@@ -20,8 +21,8 @@ export function RoleProtect({ allowedRoles, children, fallback = null }: RolePro
   const { hasRole, isLoading } = useRole(allowedRoles);
 
   if (isLoading) {
-    // Return null or a subtle loading state to prevent flash of content
-    return null; 
+    // Show a subtle skeleton to prevent layout shift during role check
+    return <Skeleton className="h-6 w-16 rounded" />;
   }
 
   if (!hasRole) {

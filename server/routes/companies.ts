@@ -38,6 +38,7 @@ companyRoutes.get('/', async (c) => {
         orderBy: { createdAt: 'desc' },
         include: {
             user: { select: { id: true, name: true, email: true } },
+            companyUsers: true,
         },
     });
 
@@ -117,8 +118,14 @@ companyRoutes.put('/:id', async (c) => {
         return c.json({ error: 'Company not found' }, 404);
     }
 
-    if (user.role !== 'admin' && existing.createdBy !== user.id) {
-        return c.json({ error: 'Forbidden' }, 403);
+    // Check RBAC: must be OWNER, ADMIN, or global admin
+    if (user.role !== 'admin') {
+        const companyUser = await prisma.companyUser.findUnique({
+            where: { userId_companyId: { userId: user.id, companyId: id } }
+        });
+        if (!companyUser || !['OWNER', 'ADMIN'].includes(companyUser.role)) {
+            return c.json({ error: 'Forbidden: Only OWNER or ADMIN can edit company details' }, 403);
+        }
     }
 
     const parsed = companySchema.safeParse(body);
@@ -155,8 +162,14 @@ companyRoutes.delete('/:id', async (c) => {
         return c.json({ error: 'Company not found' }, 404);
     }
 
-    if (user.role !== 'admin' && existing.createdBy !== user.id) {
-        return c.json({ error: 'Forbidden' }, 403);
+    // Only global admin or company OWNER can delete
+    if (user.role !== 'admin') {
+        const companyUser = await prisma.companyUser.findUnique({
+            where: { userId_companyId: { userId: user.id, companyId: id } }
+        });
+        if (!companyUser || companyUser.role !== 'OWNER') {
+            return c.json({ error: 'Forbidden: Only OWNER can cancel a company' }, 403);
+        }
     }
 
     if (existing.status === 'cancelled') {
@@ -236,10 +249,25 @@ companyRoutes.post('/:companyId/users', requireCompanyRole(['OWNER', 'ADMIN']), 
 companyRoutes.put('/:companyId/users/:userId', requireCompanyRole(['OWNER', 'ADMIN']), async (c) => {
     const companyId = parseInt(c.req.param('companyId'));
     const userId = c.req.param('userId');
+    const currentUser = c.get('user');
+    const currentCompanyUser = c.get('companyUser');
     const { role } = await c.req.json();
 
     if (!['OWNER', 'ADMIN', 'FINANCE', 'DATA_ENTRY'].includes(role)) {
         return c.json({ error: 'Invalid role' }, 400);
+    }
+
+    // Find target member
+    const targetMember = await prisma.companyUser.findUnique({
+        where: { userId_companyId: { userId, companyId } }
+    });
+    if (!targetMember) {
+        return c.json({ error: 'Member not found' }, 404);
+    }
+
+    // Only OWNER (or global admin) can change another OWNER's role
+    if (targetMember.role === 'OWNER' && currentCompanyUser?.role !== 'OWNER' && currentUser.role !== 'admin') {
+        return c.json({ error: 'Forbidden: Only an OWNER can change another OWNER\'s role' }, 403);
     }
 
     // Attempt to update

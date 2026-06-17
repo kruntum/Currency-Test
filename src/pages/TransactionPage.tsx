@@ -6,6 +6,7 @@ import { TransactionDialog } from '@/components/transaction-dialog';
 import { ProductManagerDialog } from '@/components/product-manager-dialog';
 import { CustomerManagerDialog } from '@/components/customer-manager-dialog';
 import { PageHeader } from '@/components/page-header';
+import { RoleProtect } from '@/components/role-protect';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -22,11 +23,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronLeft, ChevronRight, ChevronDown, Package, Users, CheckCircle2, CircleDashed, Clock, Filter, Download, ChevronsUpDown, Check } from 'lucide-react';
+import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronDown, ChevronRight, Package, Users, Download, ChevronsUpDown, Check, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatNumber } from '@/lib/utils';
-import * as XLSX from 'xlsx';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PaymentStatusBadge } from '@/components/payment-status-badge';
+import { CurrencyBadge } from '@/components/currency-badge';
 
 export default function TransactionPage() {
   const { companyId } = useParams();
@@ -54,12 +58,12 @@ export default function TransactionPage() {
   const [yearOpen, setYearOpen] = useState(false);
 
   useEffect(() => {
-    if (companyId) setCompanyId(parseInt(companyId));
-  }, [companyId, setCompanyId]);
-
-  useEffect(() => {
-    fetchTransactions(1);
-  }, [fetchTransactions, companyId]);
+    if (companyId) {
+      const parsedId = parseInt(companyId);
+      setCompanyId(parsedId);
+      fetchTransactions(1);
+    }
+  }, [companyId, setCompanyId, fetchTransactions]);
 
   // Fetch customer & currency lists for filter dropdowns
   useEffect(() => {
@@ -115,11 +119,13 @@ export default function TransactionPage() {
     setExpandedInvIds(next);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (transactions.length === 0) {
       toast.error('ไม่มีข้อมูลสำหรับส่งออก');
       return;
     }
+
+    const XLSX = await import('xlsx');
 
     const rows: Record<string, unknown>[] = [];
     transactions.forEach((tx, i) => {
@@ -275,7 +281,7 @@ export default function TransactionPage() {
                         <Check className={`mr-1 h-3 w-3 ${!filterYear ? 'opacity-100' : 'opacity-0'}`} />
                         ปีทั้งหมด
                       </CommandItem>
-                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 3 + i).map((y) => (
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (
                         <CommandItem key={y} value={String(y)} onSelect={() => { setFilterYear(String(y)); setYearOpen(false); fetchTransactions(1); }} className="text-xs">
                           <Check className={`mr-1 h-3 w-3 ${filterYear === String(y) ? 'opacity-100' : 'opacity-0'}`} />
                           {y}
@@ -313,13 +319,15 @@ export default function TransactionPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : transactions.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-                <FileText className="h-12 w-12 opacity-50 mb-3" />
-                <p>ยังไม่มีรายการ</p>
-                <Button variant="outline" className="mt-4 gap-2" onClick={handleCreate}>
-                  <Plus className="h-4 w-4" /> สร้างรายการแรก
-                </Button>
-              </div>
+              <EmptyState
+                icon={FileText}
+                title="ยังไม่มีรายการ"
+                action={
+                  <Button variant="outline" className="gap-2" onClick={handleCreate}>
+                    <Plus className="h-4 w-4" /> สร้างรายการแรก
+                  </Button>
+                }
+              />
             ) : (
               <div className="flex-1 overflow-auto rounded-md min-h-0">
                 <Table>
@@ -355,14 +363,7 @@ export default function TransactionPage() {
                             <Badge variant="secondary">{tx._count?.invoices ?? 0}</Badge>
                           </TableCell>
                           <TableCell className="py-1">
-                            <div className="flex items-center gap-1.5 w-fit">
-                              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-600 dark:text-slate-300 shadow-xs">
-                                {tx.currency?.symbol}
-                              </span>
-                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                                {tx.currencyCode}
-                              </span>
-                            </div>
+                            <CurrencyBadge code={tx.currencyCode} symbol={tx.currency?.symbol} />
                           </TableCell>
                           <TableCell className="text-right text-xs py-1">{formatNumber(tx.exchangeRate, 6)}</TableCell>
                           <TableCell className="text-right py-1">
@@ -380,26 +381,34 @@ export default function TransactionPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center py-1">
-                            <Badge 
-                              variant={tx.paymentStatus === 'PAID' ? 'success' : tx.paymentStatus === 'PARTIAL' ? 'warning' : 'secondary'} 
-                              className="text-[10px] w-20 justify-center shadow-none gap-1 pl-1.5"
-                            >
-                              {tx.paymentStatus === 'PAID' && <CheckCircle2 className="w-3 h-3" />}
-                              {tx.paymentStatus === 'PARTIAL' && <CircleDashed className="w-3 h-3" />}
-                              {tx.paymentStatus === 'PENDING' && <Clock className="w-3 h-3" />}
-                              {tx.paymentStatus}
-                            </Badge>
+                            <PaymentStatusBadge status={tx.paymentStatus} />
                           </TableCell>
                           <TableCell className="text-right py-1" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
-                              <Button variant="ghost" size="sm" className="gap-1 h-7 text-xs"
-                                onClick={() => handleEdit(tx.id)}>
-                                <Pencil className="h-3.5 w-3.5" /> แก้ไข
-                              </Button>
-                              <Button variant="ghost" size="sm" className="gap-1 h-7 text-xs text-destructive"
-                                onClick={() => setDeleteId(tx.id)}>
-                                <Trash2 className="h-3.5 w-3.5" /> ลบ
-                              </Button>
+                              <RoleProtect allowedRoles={['OWNER', 'ADMIN', 'DATA_ENTRY']}>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="gap-1 h-7 text-xs"
+                                  disabled={tx.paymentStatus !== 'PENDING'}
+                                  onClick={() => handleEdit(tx.id)}
+                                  title={tx.paymentStatus !== 'PENDING' ? 'ไม่สามารถแก้ไขได้เนื่องจากมีการตัดชำระเงินแล้ว กรุณายกเลิกการตัดชำระก่อน' : undefined}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" /> แก้ไข
+                                </Button>
+                              </RoleProtect>
+                              <RoleProtect allowedRoles={['OWNER', 'ADMIN']}>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="gap-1 h-7 text-xs text-destructive"
+                                  disabled={tx.paymentStatus !== 'PENDING'}
+                                  onClick={() => setDeleteId(tx.id)}
+                                  title={tx.paymentStatus !== 'PENDING' ? 'ไม่สามารถลบได้เนื่องจากมีการตัดชำระเงินแล้ว กรุณายกเลิกการตัดชำระก่อน' : undefined}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> ลบ
+                                </Button>
+                              </RoleProtect>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -480,47 +489,14 @@ export default function TransactionPage() {
               </div>
             )}
 
-            {/* Pagination & Footer */}
             {!loading && transactions.length > 0 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between pt-4 pb-1 px-1 gap-4 mt-auto border-t">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">
-                    รายการทั้งหมด <span className="font-medium text-foreground">{pagination.total}</span> รายการ
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-muted-foreground">แสดง</span>
-                    <Select value={String(pagination.limit)} onValueChange={(v) => { setLimit(parseInt(v)); fetchTransactions(1); }}>
-                      <SelectTrigger className="w-[70px] h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30">30</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <span className="text-xs text-muted-foreground">รายการ</span>
-                  </div>
-                </div>
-                
-                {pagination.totalPages > 1 && (
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm text-muted-foreground">
-                      หน้า <span className="font-medium text-foreground">{pagination.page}</span> จาก {pagination.totalPages}
-                    </p>
-                    <div className="flex gap-1">
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={pagination.page <= 1}
-                        onClick={() => fetchTransactions(pagination.page - 1)}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={pagination.page >= pagination.totalPages}
-                        onClick={() => fetchTransactions(pagination.page + 1)}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <DataTablePagination
+                total={pagination.total}
+                page={pagination.page}
+                perPage={pagination.limit}
+                onPageChange={(p) => fetchTransactions(p)}
+                onPerPageChange={(l) => { setLimit(l); fetchTransactions(1); }}
+              />
             )}
           </CardContent>
         </Card>

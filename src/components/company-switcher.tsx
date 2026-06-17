@@ -16,6 +16,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { useSession } from '@/lib/auth-client';
 
 export function CompanySwitcher() {
   const { isMobile } = useSidebar();
@@ -23,6 +24,11 @@ export function CompanySwitcher() {
   const { companyId } = useParams();
   const { companies, fetchCompanies } = useCompanyStore();
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
+
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const globalRole = (session?.user as { role?: string } | undefined)?.role;
+  const isGlobalAdmin = globalRole === 'admin';
 
   useEffect(() => {
     fetchCompanies();
@@ -38,7 +44,20 @@ export function CompanySwitcher() {
 
   const handleSelectCompany = (company: Company) => {
     setActiveCompany(company);
-    navigate(`/company/${company.id}`);
+    
+    if (isGlobalAdmin) {
+      navigate(`/company/${company.id}`);
+      return;
+    }
+
+    const member = company.companyUsers?.find((cu) => cu.userId === userId);
+    const role = member?.role;
+
+    if (role === 'DATA_ENTRY' || role === 'FINANCE') {
+      navigate(`/company/${company.id}/transactions`);
+    } else {
+      navigate(`/company/${company.id}`);
+    }
   };
 
   const handleManageCompanies = () => {

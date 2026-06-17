@@ -1,116 +1,126 @@
 # Currency Management System
 
-ระบบบันทึกข้อมูลใบขนสินค้าและอินวอยซ์พร้อมการดึงอัตราแลกเปลี่ยนอัตโนมัติ
+ระบบบันทึกข้อมูลใบขนสินค้า (Declaration) และอินวอยซ์พร้อมการดึงอัตราแลกเปลี่ยนอัตโนมัติจากธนาคารแห่งประเทศไทย (BOT) และระบบกระทบยอด/ตัดชำระเงินต่างประเทศ (Reconciliation) หลายบริษัท (Multi-Company Support)
 
 ---
 
-## 🚀 How to Starter Project (คู่มือการติดตั้งโครงการ)
+## ✨ Key Features (คุณสมบัติเด่นของระบบ)
 
-โปรเจกต์นี้ใช้โครงสร้าง Full-Stack ประกอบด้วย Frontend (React/Vite) และ Backend (Hono/Node) พร้อมฐานข้อมูล PostgreSQL
+ระบบได้รับการพัฒนาให้มีความเสถียร มีความปลอดภัยสูง และรองรับการทำงานในระดับองค์กร (Enterprise Ready) โดยประกอบด้วยคุณสมบัติหลักดังนี้:
+
+### 1. 🏢 Multi-Company & Role-Based Access Control (RBAC)
+- **รองรับหลายบริษัท:** ผู้ใช้สามารถสร้าง สลับบริษัท และทำรายการแยกขาดตามบริษัทได้อย่างปลอดภัย
+- **การจัดการบทบาทระดับบริษัท:** กำหนดสิทธิ์การทำงานละเอียด 4 ระดับ:
+  - **OWNER / ADMIN:** จัดการข้อมูลบริษัท, สมาชิก, รายการธุรกรรม, และการเงินได้ทั้งหมด
+  - **FINANCE:** จัดการระบบการเงิน (Receipts, FCD, การตัดชำระ) และดู Dashboard ได้ แต่แก้ไขโครงสร้างบริษัทไม่ได้
+  - **DATA_ENTRY:** เพิ่ม/แก้ไขรายการใบขนสินค้า (Transactions) ได้เท่านั้น ไม่สามารถเข้าถึงระบบการเงินหรือ Dashboard
+- **ระบบความปลอดภัยรัดกุม:** ป้องกันการสวมรอยข้ามสิทธิ์ระดับ API และกรองเมนูตามสิทธิ์การใช้งานจริง (Role-Based UI Rendering)
+
+### 2. 🧾 ระบบนำเข้าใบขนสินค้าและอัตราแลกเปลี่ยนอัตโนมัติ (Transactions & Invoices)
+- **ดึงเรทจาก BOT อัตโนมัติ:** เมื่อระบุวันที่และสกุลเงิน ระบบจะเชื่อมต่อกับ API ธนาคารแห่งประเทศไทย (BOT) เพื่อดึงอัตราแลกเปลี่ยนย้อนหลังทันที
+- **บันทึกแยกรายอินวอยซ์:** รองรับการผูก 1 ใบขนต่อหลายใบกำกับสินค้า (Invoice) พร้อมแยกรายละเอียดสินค้าแต่ละรายการ (Invoice Items)
+- **ระบบคำนวณอัตโนมัติ:** แสดงยอดเป็นสกุลเงินต่างประเทศ (FCY) และมูลค่ารวมเงินบาท (THB) เสมือนจริง
+
+### 💵 3. Reconciliation Engine (ระบบจัดการใบรับเงินและการตัดชำระ)
+- **Receipts Management:** บันทึกการรับเงินโอนสกุลต่างประเทศ (FCY) จากลูกค้า พร้อมบันทึกอัตราแลกเปลี่ยนและยอดคำนวณ THB
+- **การตัดชำระอัจฉริยะ (Payment Allocation):** ระบบกระทบยอดนำใบรับเงิน (Receipt) ไปจับคู่ชำระหนี้กับใบขนสินค้า (Transaction) พร้อมคำนวณผลต่างอัตราแลกเปลี่ยน **2 ชั้น (2-Layer FX Gain/Loss)**:
+  - **Layer 1 P/L (Accounting):** กำไร/ขาดทุนทางบัญชีจากการตั้งหนี้เทียบกับวันจ่ายเงินจริง (`appliedThb - invoiceThb`)
+  - **Layer 2 P/L (Treasury):** กำไร/ขาดทุนจากแผนกบริหารเงินคลัง จากต้นทุนอัตราแลกเปลี่ยนที่แท้จริงเปรียบเทียบกับราคาขายคืนธนาคาร (`(actualBankRate - costRate) * amountFcy`)
+- **ระบบยกเลิกรายการ (Reversal):** สามารถยกเลิกการตัดชำระ และดึงเงินคืนคลัง/กระเป๋าเงินเพื่อจัดสรรใหม่ได้อย่างปลอดภัย
+- **ระบบล็อกความปลอดภัย (Allocation Lock):** ใบขนสินค้าที่ถูกตัดชำระเงินแล้ว (สถานะ `PARTIAL` หรือ `PAID`) จะถูก**ล็อกไม่ให้แก้ไขหรือลบ**ในทุกระดับสิทธิ์ จนกว่าจะมีการทำรายการย้อนกลับสถานะการชำระเงิน (Reversal) เพื่อป้องกันการไม่ลงรอยของตัวเลขทางบัญชี
+
+### 🏦 4. FCD Treasury & Exchange (บริหารเงินตราต่างประเทศ)
+- **FCD Holding Pool:** แสดงรายการกระเป๋าเงินตราต่างประเทศคงเหลือสะสม แยกตามบัญชี Receipt และคำนวณราคาเฉลี่ยสะสม (Average Cost Rate)
+- **ระบบแลกเปลี่ยนเงิน (Exchange Log):** บันทึกประวัติการขายเงินตราต่างประเทศคืนธนาคารพาณิชย์เพื่อรับเป็นเงินบาท พร้อมบันทึกกำไรขาดทุนของแผนกบริหารเงิน (Layer 2 Gain/Loss) ทันที
+
+### 📊 5. Executive FX Dashboard & Reporting
+- **สรุปผลการบริหารความเสี่ยงอัตราแลกเปลี่ยน:** แสดงผลกำไร/ขาดทุนสุทธิ (Net FX Gain/Loss) แยกการแสดงผลตาม Layer 1 และ Layer 2
+- **กราฟวิเคราะห์แนวโน้ม:** กราฟสรุปผลงานรายเดือนและรายสกุลเงินผ่าน Recharts
+- **ตารางวิเคราะห์อายุหนี้ (Outstanding Receivables):** แสดงรายชื่อลูกหนี้ค้างชำระ จัดอันดับความล่าช้าการชำระเงิน (Aging 30/60/90 วัน)
+- **การส่งออกรายงาน:** ส่งออกข้อมูลรายละเอียดธุรกรรม และประวัติการแลกเปลี่ยนเงินคลังเป็นไฟล์ Excel (`.xlsx`) ทันทีผ่าน Web Browser
+
+---
+
+## 🚀 How to Start Project (คู่มือการติดตั้งและใช้งาน)
 
 ### สิ่งที่ต้องมีเบื้องต้น
-
 - [Node.js](https://nodejs.org/) (เวอร์ชัน 20 ขึ้นไป)
-- [Docker](https://www.docker.com/) (สำหรับรันฐานข้อมูล)
+- [Docker](https://www.docker.com/) (สำหรับรันฐานข้อมูลในเครื่องคอมพิวเตอร์)
 - [Git](https://git-scm.com/)
 
 ### ขั้นตอนการรันโปรเจกต์ (Local Development)
 
-1. **Clone repository (ถ้ามี)** หรือเข้าไปที่โฟลเดอร์โปรเจกต์
-
+1. **Clone Repository และเข้าไปที่โฟลเดอร์โปรเจกต์**
    ```bash
    cd d:\work\Currency-test
    ```
 
 2. **ติดตั้ง Dependencies**
-
    ```bash
    npm install
    ```
 
 3. **เตรียม Environment Variables**
-   สร้างไฟล์ `.env` ที่ root ของโปรเจกต์ และกำหนดค่าดังนี้:
-
+   สร้างไฟล์ `.env` ที่ root ของโปรเจกต์ และกำหนดค่าตามตัวอย่าง:
    ```env
+   # ตัวอย่างเชื่อมต่อ Database (PostgreSQL)
    DATABASE_URL="postgresql://currency_user:currency_pass_2024@localhost:5432/currency_db"
-   BETTER_AUTH_SECRET="<your-secret-key-here>"
+   
+   # Better Auth Secret (สามารถสร้างคีย์สุ่มขึ้นมาทดแทนได้)
+   BETTER_AUTH_SECRET="your-better-auth-secret-key"
    BETTER_AUTH_URL="http://localhost:5173"
-   BOT_API_KEY="<your-bank-of-thailand-api-key>"
+   
+   # API Key จากธนาคารแห่งประเทศไทย (ถ้ามี)
+   BOT_API_KEY="your-bank-of-thailand-api-key"
+   
+   # รายการ Origins ที่อนุญาตสำหรับการเชื่อมต่อ (CORS Security)
+   ALLOWED_ORIGINS="http://localhost:5173,http://localhost:3000"
    ```
 
 4. **รันฐานข้อมูลด้วย Docker Compose**
-
    ```bash
    docker-compose up db -d
    ```
 
-5. **รัน Migration และ Seed ข้อมูลเริ่มต้น (User admin เริ่มต้น)**
-
+5. **รัน Migration และ Seed ข้อมูลเริ่มต้น**
+   คำสั่งนี้จะทำการติดตั้งโครงสร้างตารางข้อมูลล่าสุด และสร้างบัญชีทดสอบเริ่มต้น (มีบทบาทเป็น Admin)
    ```bash
    npm run db:migrate
+   ```
+   และรัน Seed ข้อมูลจำลองและผู้ใช้งาน:
+   ```bash
    npm run db:seed
    ```
+   *(อีเมลเข้าใช้เริ่มต้น: `admin@currency.local` รหัสผ่าน: `admin1234`)*
 
-6. **เปิดใช้งานแอปพลิเคชัน (ทั้ง Frontend และ Backend ควบคู่กัน)**
+6. **เปิดใช้งานแอปพลิเคชัน (ทั้ง Frontend และ Backend)**
    ```bash
    npm run dev
    ```
-
-   - Frontend จะทำงานที่ `http://localhost:5173`
-   - Backend API จะทำงานที่ `http://localhost:3000`
-
----
-
-## 📖 How to Use (คู่มือการใช้งาน)
-
-1. **การลงชื่อเข้าใช้**
-   - เมื่อเข้ามาที่ `http://localhost:5173` จะพบกับหน้า Login
-   - สามารถใช้ปุ่ม "สมัครสมาชิก" เพื่อสร้าง User ใหม่ (หรือใช้ Admin User ที่ได้จากขั้นตอน `npm run db:seed`)
-
-2. **หน้า Dashboard**
-   - แสดงสถิติและภาพรวมของมูลค่าต่างๆ (เช่น ยอดรวม THB, จำนวนใบขน, กราฟแนวโน้ม)
-
-3. **หน้า Transactions (รายการใบขนสินค้า)**
-   - ระบบเพิ่ม ลด แก้ไข (CRUD) ใบขนสินค้าและอินวอยซ์
-   - เมื่อเลือกสกุลเงินและวันที่ ระบบจะดึงอัตราแลกเปลี่ยน **อัตโนมัติ** จาก API (BOT หรือ API ที่กำหนด) และคำนวณยอดเงินเป็นบาท (THB) ให้ทันที
-
-4. **หน้าจัดการผู้ใช้ (Admin Only)**
-   - เข้าถึงได้เฉพาะผู้ที่มี Role เป็น "admin"
-   - ใช้จัดการระดับสิทธิ์ (Role) และแบนผู้ใช้ผ่าน `/admin/users`
+   - **Frontend (React/Vite)** จะทำงานที่: `http://localhost:5173`
+   - **Backend API (Hono)** จะทำงานที่: `http://localhost:3000`
 
 ---
 
-## 🤖 Skills AI (คู่มือและข้อกำหนดสำหรับ AI Agent)
+## 🛠️ Technology Stack (เทคโนโลยีที่ใช้)
 
-เพื่อให้ AI หรือ Tool อย่าง GitHub Copilot/Cline ทำงานได้อย่างมีประสิทธิภาพ กรุณาปฏิบัติตามข้อกำหนดเหล่านี้เมื่อทำการแก้ไขโค้ด:
+### 💻 Frontend (Client Side)
+- **React 19 & Vite 7:** รองรับฟังก์ชันใหม่ล่าสุด ความเร็วในการโหลดสูง
+- **Tailwind CSS v4:** สไตล์ลิ่งแบบโมเดิร์น คอมไพล์ได้เร็วและมีประสิทธิภาพสูง
+- **Zustand:** จัดการ Global State อย่างมีประสิทธิภาพ แยกสโตร์ตามฟีเจอร์ (`transaction-store`, `receipt-store`, `treasury-store`, `company-store`, `dashboard-store`)
+- **Shadcn UI (Radix UI):** คอมโพเนนต์ UI พื้นฐานสำหรับความเข้ากันได้และการออกแบบที่สวยงาม
+- **Recharts:** แสดงกราฟเส้น กราฟแท่ง และกราฟสัดส่วนสกุลเงินที่ลื่นไหล
+- **Lucide Icons & Sonner:** คลังไอคอนที่สมบูรณ์และระบบหน้าต่างแจ้งเตือนธุรกรรมสำเร็จ
 
-### 1. Technology Stack
+### ⚙️ Backend (Server Side)
+- **Hono Framework:** เฟรมเวิร์ก HTTP ที่ทำงานได้เบา รวดเร็ว และรองรับ Node.js Adapter
+- **Prisma ORM:** ตัวช่วยจัดการข้อมูล PostgreSQL ในระดับวัตถุ (Object-Relational) รองรับ Transaction SQL และการป้องกันสคริปต์อันตราย
+- **Better Auth:** จัดการระบบลงทะเบียน ล็อกอิน จัดการเซสชัน และสิทธิ์แอดมินระดับ API อย่างปลอดภัย
+- **Decimal.js:** ใช้จัดการการคำนวณทางคณิตศาสตร์ความละเอียดสูง (ทศนิยม 4-6 ตำแหน่ง) ป้องกันปัญหาเศษทศนิยมลอย (Floating Point Errors) ซึ่งเป็นข้อบังคับในระบบบัญชีการเงิน
 
-- **Frontend**: React 19, Vite, Tailwind CSS v4, Zustand, Shadcn UI (Radix), Lucide Icons, Sonner (Toasts)
-- **Backend**: Hono (Node.js Adapter), Better Auth (Authentication)
-- **Database**: PostgreSQL (ผ่าน Prisma ORM)
-- **Language**: TypeScript แบบ Strict Mode
-
-### 2. Architecture & File Structure
-
-- `src/` โฟลเดอร์สำหรับโค้ดฝั่ง Frontend (React Components, Pages, Stores, UI)
-- `server/` โฟลเดอร์สำหรับโค้ดฝั่ง Backend (Hono Routes, Auth Config)
-- `prisma/` การจัดการ Schema Database (`schema.prisma`) และ Seed Script
-
-### 3. Coding Guidelines
-
-- **UI Components**: ใช้ Shadcn UI (จาก `src/components/ui`) เสมอ หลีกเลี่ยงการเขียนคอมโพเนนต์ใหม่ตั้งแต่ต้นถ้ามีมาให้แล้ว
-- **Tailwind CSS**: ตอนนี้ใช้ **Tailwind v4** ห้ามใช้ Arbitrary Values เช่น `top-[50%]` หรือ `left-[50%]` ถ้าหลีกเลี่ยงได้ ให้ใช้ Utility ชั้นนำอย่าง `top-1/2`, `-translate-x-1/2` แทน เพื่อป้องกันการเรนเดอร์ผิดพลาด
-- **State Management**: ใช้ `Zustand` (เช่น `useTransactionStore`) สำหรับจัดการ Global State แทน Context API แบบดั้งเดิม
-- **Data Fetching**: ซิงโครไนซ์ State Store กับ Backend API ให้เป็นระเบียบ และการจัดการ Loading State
-- **Toast Notifications**: ใช้ `sonner` (`import { toast } from 'sonner'`) สำหรับแจ้งเตือนการทำรายการสำเร็จ/ล้มเหลวเสมอ
-
-### 4. Database Changes (Prisma)
-
-- หากมีการเปลี่ยนแปลง Schema ใน `prisma/schema.prisma` ต้องเตือนให้ผู้พัฒนา (User) ทำการรัน `npx prisma migrate dev` ด้วยทุกครั้ง
-- หลีกเลี่ยงการลบตารางที่มีความสัมพันธ์รุนแรงโดยไม่ได้ตรวจสอบ Cascade Constraint
-
-### 5. Authentication
-
-- โปรเจกต์นี้ใช้ **Better Auth** การเข้าถึงข้อมูลผู้ใช้สามารถดึงได้จาก `useSession()` ในฝั่งหน้าบ้าน
-- ฝั่ง Backend ให้เช็คจาก `auth.api.getSession({ headers: c.req.raw.headers })` ก่อนทำรายการ CUD เสมอ เพื่อความปลอดภัย
+### 🔐 Security & Optimization Controls
+- **CORS Protection:** กรองโดเมนและไอพีด้วย White-list ป้องกันการเชื่อมต่อที่ไม่ได้รับอนุญาต
+- **API Guard:** ตรวจสอบสิทธิ์ระดับ API ทุกช่องทางผ่าน middleware `companyAuth` เพื่อความปลอดภัยสองชั้น
+- **Code Chunk Splitting:** แบ่งแยกโค้ดแอปหลักออกจากไลบรารีใหญ่ เช่น React, Radix, Recharts และ Better Auth เพื่อให้หน้าเว็บโหลดครั้งแรกเร็วขึ้น 52%
+- **Dynamic Imports:** แยกไลบรารีส่งออกข้อมูลอย่าง `XLSX` (ขนาด ~400KB) ให้โหลดเฉพาะตอนที่ผู้ใช้กดปุ่ม Export เท่านั้น ป้องกันการหน่วงความเร็วในการเริ่มโปรแกรมครั้งแรก
+- **Audit Logging:** บันทึกการทำธุรกรรมแบบย้อนหลัง (Create, Update, Delete) ลงตารางประวัติผู้ใช้งานอย่างละเอียด

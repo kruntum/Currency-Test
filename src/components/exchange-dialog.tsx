@@ -17,11 +17,12 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   companyId: number;
   pool: FCDWallet | null;
+  onSuccess?: () => void;
 }
 
 const today = format(new Date(), 'yyyy-MM-dd');
 
-export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
+export function ExchangeDialog({ open, onOpenChange, companyId, pool, onSuccess }: Props) {
   const { exchangeFcy } = useTreasuryStore();
 
   const [amountFcy, setAmountFcy] = useState('');
@@ -68,6 +69,7 @@ export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
         exchangedDate
       });
       toast.success('บันทึกการแลกเปลี่ยนเสร็จสมบูรณ์');
+      onSuccess?.();
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err.message);
@@ -110,7 +112,7 @@ export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
                     step="0.01" 
                     value={amountFcy} 
                     onChange={(e) => setAmountFcy(e.target.value)} 
-                    className="flex-1"
+                    className="flex-1 h-7 text-xs"
                 />
                 <Button 
                     variant="secondary" 
@@ -129,6 +131,7 @@ export function ExchangeDialog({ open, onOpenChange, companyId, pool }: Props) {
                 value={actualBankRate} 
                 onChange={(e) => setActualBankRate(e.target.value)} 
                 placeholder="เช่น 36.50"
+                className="h-7 text-xs"
             />
             <p className="text-xs text-muted-foreground mt-1 text-right">
               ต้นทุนเรท BOT ของบิลนี้: <strong>{formatNumber(costRate, 4)}</strong>

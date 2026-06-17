@@ -148,4 +148,71 @@ allocationRoutes.post('/', async (c) => {
     return c.json({ data: result }, 201);
 });
 
+// DELETE /api/allocations/:id — Reverse a payment allocation
+allocationRoutes.delete('/:id', async (c) => {
+    const companyUser = c.get('companyUser');
+    const companyId = companyUser!.companyId;
+    const id = parseInt(c.req.param('id'));
+
+    if (isNaN(id)) return c.json({ error: 'Invalid allocation ID' }, 400);
+
+    const allocation = await prisma.paymentAllocation.findUnique({
+        where: { id },
+        include: {
+            transaction: true,
+            receipt: true,
+        },
+    });
+
+    if (!allocation) return c.json({ error: 'Allocation not found' }, 404);
+
+    // Verify company scope
+    if (allocation.transaction.companyId !== companyId) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    await prisma.$transaction(async (tx) => {
+        // 1. Reverse transaction paidThb and status
+        const currentPaidThb = new Decimal(allocation.transaction.paidThb.toString());
+        const reversedInvoiceThb = new Decimal(allocation.invoiceThb.toString());
+        const newPaidThb = Decimal.max(0, currentPaidThb.minus(reversedInvoiceThb));
+        const totalThb = new Decimal(allocation.transaction.thbAmount.toString());
+
+        let newTxStatus = 'PENDING';
+        if (newPaidThb.greaterThan(0)) {
+            newTxStatus = newPaidThb.greaterThanOrEqualTo(totalThb.minus(0.01)) ? 'PAID' : 'PARTIAL';
+        }
+
+        await tx.transaction.update({
+            where: { id: allocation.transactionId },
+            data: { paidThb: newPaidThb.toNumber(), paymentStatus: newTxStatus },
+        });
+
+        // 2. Reverse receipt allocatedThb and status (if receipt-based)
+        if (allocation.receiptId && allocation.receipt) {
+            const currentAllocated = new Decimal(allocation.receipt.allocatedThb.toString());
+            const reversedApplied = new Decimal(allocation.appliedThb.toString());
+            const newAllocated = Decimal.max(0, currentAllocated.minus(reversedApplied));
+            const receivedThb = new Decimal(allocation.receipt.receivedThb.toString());
+
+            let newReceiptStatus = 'UNALLOCATED';
+            if (newAllocated.greaterThan(0)) {
+                newReceiptStatus = newAllocated.greaterThanOrEqualTo(receivedThb.minus(0.01))
+                    ? 'FULLY_ALLOCATED'
+                    : 'PARTIAL';
+            }
+
+            await tx.receipt.update({
+                where: { id: allocation.receiptId },
+                data: { allocatedThb: newAllocated.toNumber(), status: newReceiptStatus },
+            });
+        }
+
+        // 3. Delete the allocation record
+        await tx.paymentAllocation.delete({ where: { id } });
+    });
+
+    return c.json({ success: true });
+});
+
 export default allocationRoutes;

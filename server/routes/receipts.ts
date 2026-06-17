@@ -7,7 +7,8 @@ import Decimal from 'decimal.js';
 
 const receiptRoutes = new Hono<AppEnv>();
 
-receiptRoutes.use('*', requireCompanyRole(['OWNER', 'ADMIN', 'FINANCE']));
+// All roles can read receipts; writes restricted per-route
+receiptRoutes.use('*', requireCompanyRole(['OWNER', 'ADMIN', 'FINANCE', 'DATA_ENTRY']));
 
 const createReceiptSchema = z.object({
     customerId: z.number(),
@@ -28,7 +29,7 @@ receiptRoutes.get('/', async (c) => {
         include: {
             customer: { select: { id: true, name: true } },
             allocations: {
-                include: { transaction: { select: { declarationNumber: true } } }
+                include: { transaction: { select: { declarationNumber: true, currencyCode: true } } }
             }
         },
         orderBy: { receivedDate: 'desc' }
@@ -56,11 +57,14 @@ receiptRoutes.get('/unallocated', async (c) => {
     return c.json({ data: receipts });
 });
 
-// POST /api/receipts
+// POST /api/receipts — restricted to OWNER/ADMIN/FINANCE
 receiptRoutes.post('/', async (c) => {
-    const user = c.get('user');
     const companyUser = c.get('companyUser');
-    const companyId = companyUser?.companyId || parseInt((c.req.query('companyId') || c.req.header('x-company-id')) as string);
+    if (!companyUser || !['OWNER', 'ADMIN', 'FINANCE'].includes(companyUser.role)) {
+        return c.json({ error: 'Forbidden: DATA_ENTRY cannot create receipts' }, 403);
+    }
+    const user = c.get('user');
+    const companyId = companyUser!.companyId;
     const body = await c.req.json();
 
     const parsed = createReceiptSchema.safeParse(body);

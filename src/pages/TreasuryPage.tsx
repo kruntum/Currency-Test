@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useRole } from '@/hooks/use-role';
 import { useTreasuryStore, type FCDWallet } from '@/stores/treasury-store';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -13,31 +14,48 @@ import {
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { ExchangeDialog } from '@/components/exchange-dialog';
 import { RoleProtect } from '@/components/role-protect';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ArrowRightLeft, Wallet, TrendingUp, TrendingDown, Filter, Check, ChevronsUpDown } from 'lucide-react';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { Loader2, ArrowRightLeft, Wallet, TrendingUp, TrendingDown, Filter, Check, ChevronsUpDown, Undo2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn, formatNumber } from '@/lib/utils';
+import { toast } from 'sonner';
+import { Download } from 'lucide-react';
 
 export default function TreasuryPage() {
   const { companyId } = useParams();
   const cId = parseInt(companyId || '0');
   
-  const { pools, logs, loading, fetchPools, fetchLogs } = useTreasuryStore();
+  const navigate = useNavigate();
+  const { hasRole, isLoading: roleLoading } = useRole(['OWNER', 'ADMIN', 'FINANCE']);
+
+  const { pools, logs, loading, fetchPools, fetchLogs, reverseExchange } = useTreasuryStore();
   const [exchangeOpen, setExchangeOpen] = useState(false);
   const [selectedPool, setSelectedPool] = useState<FCDWallet | null>(null);
   const [customerFilter, setCustomerFilter] = useState<string>('__ALL__');
   const [comboboxOpen, setComboboxOpen] = useState(false);
-  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [logPage, setLogPage] = useState(1);
+  const [logPerPage, setLogPerPage] = useState(50);
+  const [reversing, setReversing] = useState<number | null>(null);
 
   useEffect(() => {
-    if (cId) {
+    if (!roleLoading && !hasRole && cId) {
+      navigate(`/company/${cId}/transactions`, { replace: true });
+    }
+  }, [roleLoading, hasRole, cId, navigate]);
+  useEffect(() => {
+    if (cId && !roleLoading && hasRole) {
       fetchPools(cId);
       fetchLogs(cId);
     }
-  }, [cId, fetchPools, fetchLogs]);
+  }, [cId, fetchPools, fetchLogs, roleLoading, hasRole]);
 
   // Derive unique customer names from pools
   const uniqueCustomers = useMemo(() => {
@@ -71,9 +89,79 @@ export default function TreasuryPage() {
     setExchangeOpen(true);
   };
 
+  const handleReverseExchange = async (logId: number) => {
+    setReversing(logId);
+    try {
+      await reverseExchange(logId, cId);
+      toast.success('ยกเลิกการแลกเปลี่ยนสำเร็จ');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setReversing(null);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (filteredLogs.length === 0) {
+      toast.error('ไม่มีข้อมูลสำหรับส่งออก');
+      return;
+    }
+
+    const XLSX = await import('xlsx');
+
+    const rows = filteredLogs.map((log, index) => {
+      const pl = parseFloat(String(log.fxLayer2GainLoss)) || 0;
+      return {
+        '#': index + 1,
+        'วันที่แลกเปลี่ยน': format(new Date(log.exchangedDate), 'yyyy-MM-dd HH:mm:ss'),
+        'ชื่อลูกค้า': log.receipt?.customer.name || 'ไม่ทราบชื่อ',
+        'สกุลเงิน': log.currencyCode,
+        'จำนวนเงินต่างประเทศ (FCY)': Number(log.amountFcy),
+        'อัตราแลกเปลี่ยนคลัง (Cost Rate)': Number(log.costRate),
+        'อัตราแลกเปลี่ยนธนาคาร (Actual Rate)': Number(log.actualBankRate),
+        'ได้รับเงินบาท (THB)': Number(log.thbReceived),
+        'กำไร/ขาดทุน (THB)': pl,
+        'เลขอ้างอิง Receipt': log.receiptId ? `#${log.receiptId}` : '-',
+        'ธนาคารอ้างอิง': log.receipt?.bankReference || '-',
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Exchange History');
+
+    // Auto-size columns
+    const colWidths = Object.keys(rows[0] || {}).map((key) => ({
+      wch: Math.max(key.length + 2, 16)
+    }));
+    ws['!cols'] = colWidths;
+
+    XLSX.writeFile(wb, `exchange_history_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
+    toast.success('ส่งออก Excel สำเร็จ');
+  };
+
+  // Pagination for logs
+  const paginatedLogs = useMemo(() => {
+    const start = (logPage - 1) * logPerPage;
+    return filteredLogs.slice(start, start + logPerPage);
+  }, [filteredLogs, logPage, logPerPage]);
+
   const filterLabel = customerFilter === '__ALL__'
     ? `ทั้งหมด (${pools.length})`
     : customerFilter;
+
+  if (roleLoading) {
+    return (
+      <div className="flex-1 flex flex-col h-full items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">กำลังตรวจสอบสิทธิ์...</p>
+      </div>
+    );
+  }
+
+  if (!hasRole) {
+    return null;
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">
@@ -142,8 +230,8 @@ export default function TreasuryPage() {
           )}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3 items-start relative">
-            <Card className="md:col-span-1 bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100 shadow-sm dark:from-slate-900 dark:to-slate-800 dark:border-slate-800 sticky top-0">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start relative">
+            <Card className="xl:col-span-1 bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100 shadow-sm dark:from-slate-900 dark:to-slate-800 dark:border-slate-800 xl:sticky xl:top-4">
                 <CardHeader className="pb-2 px-4 pt-4">
                     <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
                         <Wallet className="h-4 w-4" />
@@ -156,7 +244,7 @@ export default function TreasuryPage() {
                         }
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="px-3 pb-3">
+                <CardContent className="px-4 pb-4">
                     {loading ? (
                         <div className="flex justify-center p-3"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
                     ) : filteredPools.length === 0 ? (
@@ -164,7 +252,7 @@ export default function TreasuryPage() {
                           {pools.length === 0 ? 'ยังไม่มีกระเป๋าเงิน' : 'ไม่พบกระเป๋า'}
                         </div>
                     ) : (
-                        <div className="space-y-2 max-h-[calc(100vh-250px)] overflow-y-auto pr-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-1 gap-3 xl:max-h-[calc(100vh-220px)] xl:overflow-y-auto xl:pr-1">
                             {filteredPools.map(pool => (
                                 <div key={pool.id} className="bg-white dark:bg-slate-950 p-3 rounded-lg border shadow-sm flex flex-col gap-2">
                                     <div className="flex items-center justify-between">
@@ -202,40 +290,31 @@ export default function TreasuryPage() {
                 </CardContent>
             </Card>
 
-            <Card className="md:col-span-2 bg-muted/30 border shadow-sm flex flex-col min-h-0">
+            <Card className="xl:col-span-2 bg-muted/30 border shadow-sm flex flex-col min-h-0">
                 <CardHeader className="pb-2 px-4 pt-4 shrink-0">
                     <div className="flex items-center justify-between">
                         <CardTitle className="text-sm font-semibold">ประวัติการแลกเปลี่ยน</CardTitle>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>แสดง</span>
-                            <Select value={String(rowsPerPage)} onValueChange={(v) => setRowsPerPage(Number(v))}>
-                                <SelectTrigger className="h-7 w-[70px] text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="50">50</SelectItem>
-                                    <SelectItem value="100">100</SelectItem>
-                                    <SelectItem value="300">300</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <span>รายการ</span>
-                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="xs" 
+                          onClick={handleExportExcel} 
+                          className="gap-1 h-7 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950"
+                        >
+                          <Download className="h-3.5 w-3.5" /> ส่งออก Excel
+                        </Button>
                     </div>
                     <CardDescription>
-                        {filteredLogs.length > rowsPerPage
-                          ? `แสดง ${rowsPerPage} จาก ${filteredLogs.length} รายการ`
-                          : `ทั้งหมด ${filteredLogs.length} รายการ`
-                        }
+                        {`ทั้งหมด ${filteredLogs.length} รายการ`}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="px-0 flex-1 min-h-0">
+                <CardContent className="px-0 flex-1 min-h-0 pb-4">
                     {loading ? (
                         <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                     ) : filteredLogs.length === 0 ? (
                         <div className="text-center p-4 text-muted-foreground text-sm">ยังไม่มีประวัติการแลกเปลี่ยน</div>
                     ) : (
-                        <div className="space-y-2 max-h-[calc(100vh-250px)] overflow-x-auto overflow-y-auto pr-1 pl-4">
-                            <Table className="min-w-[600px]">
+                        <div className="space-y-2 overflow-x-auto pr-4 pl-4 pb-2">
+                            <Table className="min-w-[650px]">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 w-[180px] py-1 text-[10px] h-7">วันที่รับ/ขาย</TableHead>
@@ -243,10 +322,13 @@ export default function TreasuryPage() {
                                         <TableHead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 text-right py-1 text-[10px] h-7">เรทขาย</TableHead>
                                         <TableHead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 text-right py-1 text-[10px] h-7">ได้รับ (THB)</TableHead>
                                         <TableHead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 text-right pr-4 py-1 text-[10px] h-7">กำไร/ขาดทุน</TableHead>
+                                        <RoleProtect allowedRoles={['OWNER', 'ADMIN', 'FINANCE']}>
+                                            <TableHead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 py-1 text-[10px] h-7 w-[50px]"></TableHead>
+                                        </RoleProtect>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredLogs.slice(0, rowsPerPage).map(log => {
+                                    {paginatedLogs.map(log => {
                                         const pl = parseFloat(String(log.fxLayer2GainLoss));
                                         return (
                                             <TableRow key={log.id}>
@@ -268,17 +350,61 @@ export default function TreasuryPage() {
                                                 <TableCell className="text-right font-medium text-primary py-1 h-8 text-[11px]">
                                                     ฿{formatNumber(log.thbReceived, 2)}
                                                 </TableCell>
-                                                <TableCell className="text-right pr-4 py-1 h-8">
+                                                <TableCell className="text-right pr-2 py-1 h-8">
                                                     <div className={`flex items-center justify-end gap-0.5 font-medium text-[11px] ${pl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
                                                         {pl >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                                                         {pl >= 0 ? '+' : ''}{formatNumber(pl, 2)}
                                                     </div>
                                                 </TableCell>
+                                                <RoleProtect allowedRoles={['OWNER', 'ADMIN', 'FINANCE']}>
+                                                    <TableCell className="py-1 h-8">
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="xs"
+                                                                    className="h-6 px-1.5 text-muted-foreground hover:text-destructive"
+                                                                    disabled={reversing === log.id}
+                                                                >
+                                                                    {reversing === log.id
+                                                                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                                                                        : <Undo2 className="h-3 w-3" />
+                                                                    }
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>ยกเลิกการแลกเปลี่ยน?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        ระบบจะคืนยอด FCY กลับเข้า Wallet ของ {log.receipt?.customer.name} และลบประวัตินี้ออก
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+                                                                    <AlertDialogAction
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                        onClick={() => handleReverseExchange(log.id)}
+                                                                    >
+                                                                        ยืนยันยกเลิก
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </TableCell>
+                                                </RoleProtect>
                                             </TableRow>
                                         );
                                     })}
                                 </TableBody>
                             </Table>
+                            <DataTablePagination
+                                total={filteredLogs.length}
+                                page={logPage}
+                                perPage={logPerPage}
+                                onPageChange={setLogPage}
+                                onPerPageChange={(v) => { setLogPerPage(v); setLogPage(1); }}
+                                perPageOptions={[20, 50, 100]}
+                            />
                         </div>
                     )}
                 </CardContent>
@@ -291,6 +417,7 @@ export default function TreasuryPage() {
         open={exchangeOpen} 
         onOpenChange={setExchangeOpen} 
         pool={selectedPool}
+        onSuccess={() => { fetchPools(cId); fetchLogs(cId); }}
       />
     </div>
   );

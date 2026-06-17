@@ -1,7 +1,7 @@
 import { useCompanyStore } from '@/stores/company-store';
 import { useSession, type AuthUser } from '@/lib/auth-client';
 import { useParams } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 
 /**
  * Checks if the currently authenticated user has the required roles
@@ -23,6 +23,15 @@ export function useRole(allowedRoles?: string[]) {
 
     // 3. Get company members from store
     const companyMembers = useCompanyStore((state) => state.companyMembers[currentCompanyId]);
+    const loadingMembers = useCompanyStore((state) => state.loadingMembers[currentCompanyId]);
+    const fetchCompanyUsers = useCompanyStore((state) => state.fetchCompanyUsers);
+
+    // Automatically fetch members if they are not in the store yet
+    useEffect(() => {
+        if (currentCompanyId > 0 && companyMembers === undefined && !loadingMembers) {
+            fetchCompanyUsers(currentCompanyId);
+        }
+    }, [currentCompanyId, companyMembers, loadingMembers, fetchCompanyUsers]);
 
     const hasRole = useMemo(() => {
         // Unauthenticated or missing critical data
@@ -37,7 +46,7 @@ export function useRole(allowedRoles?: string[]) {
         if (!currentCompanyId || !allowedRoles || allowedRoles.length === 0) return false;
 
         // User belongs to company check
-        if (!companyMembers) return false; // Loading or not fetched yet
+        if (!companyMembers || companyMembers.length === 0) return false; // Loading or not fetched yet
 
         const myCompanyUser = companyMembers.find(member => member.userId === userId);
         if (!myCompanyUser) return false; // User not in this company
@@ -49,6 +58,6 @@ export function useRole(allowedRoles?: string[]) {
 
     return {
         hasRole,
-        isLoading: sessionLoading || (currentCompanyId > 0 && companyMembers === undefined)
+        isLoading: sessionLoading || (currentCompanyId > 0 && (companyMembers === undefined || loadingMembers === true))
     };
 }

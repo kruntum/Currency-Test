@@ -4,11 +4,14 @@ export interface PaymentAllocation {
     id: number;
     transactionId: number;
     receiptId: number | null;
-    appliedThb: number;
-    invoiceThb: number;
-    fxLayer1GainLoss: number;
+    // Prisma Decimal fields serialize as strings over JSON — use string | number for safety
+    appliedThb: string | number;
+    invoiceThb: string | number;
+    fxLayer1GainLoss: string | number;
+    allocatedAt: string;
     transaction?: {
         declarationNumber: string;
+        currencyCode: string;
     };
 }
 
@@ -18,14 +21,15 @@ export interface Receipt {
     customerId: number;
     receivedDate: string;
     currencyCode: string;
-    receivedFcy: number;
-    receivedBotRate: number;
-    receivedThb: number;
+    // Prisma Decimal fields serialize as strings over JSON — always coerce with Number() before math
+    receivedFcy: string | number;
+    receivedBotRate: string | number;
+    receivedThb: string | number;
     status: string;
-    allocatedThb: number;
+    allocatedThb: string | number;
     bankReference: string | null;
     customer?: { id: number; name: string };
-    currency?: { symbol: string; code: string; name: string; };
+    currency?: { symbol: string; code: string; name: string };
     allocations: PaymentAllocation[];
 }
 
@@ -36,7 +40,8 @@ interface ReceiptState {
 
     fetchReceipts: (companyId: number) => Promise<void>;
     fetchUnallocatedReceipts: (companyId: number, customerId?: number) => Promise<Receipt[]>;
-    createReceipt: (data: Record<string, any>) => Promise<Receipt>;
+    createReceipt: (data: Record<string, unknown>) => Promise<Receipt>;
+    deleteAllocation: (allocationId: number, companyId: number) => Promise<void>;
 }
 
 export const useReceiptStore = create<ReceiptState>((set) => ({
@@ -91,5 +96,16 @@ export const useReceiptStore = create<ReceiptState>((set) => ({
         const json = await res.json();
         set(state => ({ receipts: [json.data, ...state.receipts] }));
         return json.data;
-    }
+    },
+
+    deleteAllocation: async (allocationId, companyId) => {
+        const res = await fetch(`/api/allocations/${allocationId}?companyId=${companyId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to reverse allocation');
+        }
+    },
 }));

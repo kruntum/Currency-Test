@@ -14,7 +14,9 @@ const envOrigins = process.env.ALLOWED_ORIGINS
     : [];
 const trustedOrigins = Array.from(new Set([...baseOrigins, ...envOrigins]));
 
-console.log('Better Auth Trusted Origins:', trustedOrigins);
+if (process.env.NODE_ENV !== 'production') {
+    console.log('Better Auth Trusted Origins:', trustedOrigins);
+}
 
 export const auth = betterAuth({
     database: prismaAdapter(prisma, {
@@ -38,7 +40,7 @@ export const auth = betterAuth({
                 type: 'string',
                 required: false,
                 defaultValue: 'user',
-                input: true,
+                input: false, // SECURITY: Prevent self-assignment of role at signup
             },
         },
     },

@@ -38,11 +38,34 @@ import { Plus, Pencil, Ban, Building2, Loader2, ExternalLink, Users, CheckCircle
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
+import { useSession } from '@/lib/auth-client';
 
 export default function CompanyPage() {
   const navigate = useNavigate();
   const { companies, loading, fetchCompanies, createCompany, updateCompany, deleteCompany } =
     useCompanyStore();
+
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const globalRole = (session?.user as { role?: string } | undefined)?.role;
+  const isGlobalAdmin = globalRole === 'admin';
+
+  const canManageCompany = (company: Company) => {
+    if (isGlobalAdmin) return true;
+    if (company.createdBy === userId) return true;
+    const member = company.companyUsers?.find((cu) => cu.userId === userId);
+    return member && (member.role === 'OWNER' || member.role === 'ADMIN');
+  };
+
+  const canAddCompany = () => {
+    if (isGlobalAdmin) return true;
+    if (companies.length === 0) return true;
+    return companies.some((c) => {
+      if (c.createdBy === userId) return true;
+      const member = c.companyUsers?.find((cu) => cu.userId === userId);
+      return member && (member.role === 'OWNER' || member.role === 'ADMIN');
+    });
+  };
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -154,10 +177,12 @@ export default function CompanyPage() {
               ทั้งหมด {companies.length} บริษัท
             </span>
           </div>
-          <Button onClick={handleOpenCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            เพิ่มบริษัท
-          </Button>
+          {canAddCompany() && (
+            <Button onClick={handleOpenCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              เพิ่มบริษัท
+            </Button>
+          )}
         </div>
 
         {/* Companies Table */}
@@ -226,40 +251,56 @@ export default function CompanyPage() {
                             <Button
                               variant="ghost"
                               size="xs"
-                              onClick={() => navigate(`/company/${company.id}`)}
+                              onClick={() => {
+                                if (isGlobalAdmin) {
+                                  navigate(`/company/${company.id}`);
+                                  return;
+                                }
+                                const member = company.companyUsers?.find((cu) => cu.userId === userId);
+                                const role = member?.role;
+                                if (role === 'DATA_ENTRY' || role === 'FINANCE') {
+                                  navigate(`/company/${company.id}/transactions`);
+                                } else {
+                                  navigate(`/company/${company.id}`);
+                                }
+                              }}
                               className="gap-1 text-primary h-7 text-[10px]"
                             >
                               <ExternalLink className="h-3 w-3" />
                               เลือก
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => handleOpenMembers(company)}
-                              className="gap-1 text-purple-600 hover:text-purple-700 h-7 text-[10px]"
-                            >
-                              <Users className="h-3 w-3" />
-                              ทีมงาน
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => handleOpenEdit(company)}
-                              className="gap-1 h-7 text-[10px]"
-                            >
-                              <Pencil className="h-3 w-3" />
-                              แก้ไข
-                            </Button>
-                            {company.status === 'active' && (
-                              <Button
-                                variant="ghost"
-                                size="xs"
-                                onClick={() => handleOpenDelete(company)}
-                                className="gap-1 text-destructive hover:text-destructive h-7 text-[10px]"
-                              >
-                                <Ban className="h-3 w-3" />
-                                ยกเลิก
-                              </Button>
+                            {canManageCompany(company) && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => handleOpenMembers(company)}
+                                  className="gap-1 text-purple-600 hover:text-purple-700 h-7 text-[10px]"
+                                >
+                                  <Users className="h-3 w-3" />
+                                  ทีมงาน
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => handleOpenEdit(company)}
+                                  className="gap-1 h-7 text-[10px]"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  แก้ไข
+                                </Button>
+                                {company.status === 'active' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    onClick={() => handleOpenDelete(company)}
+                                    className="gap-1 text-destructive hover:text-destructive h-7 text-[10px]"
+                                  >
+                                    <Ban className="h-3 w-3" />
+                                    ยกเลิก
+                                  </Button>
+                                )}
+                              </>
                             )}
                           </div>
                         </TableCell>
@@ -291,6 +332,7 @@ export default function CompanyPage() {
               </Label>
               <Input
                 id="company-name"
+                className="bg-warning/15 border-warning/30 dark:bg-warning/20 dark:border-warning/40 focus-visible:ring-warning/50"
                 placeholder="ชื่อบริษัท"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useRole } from '@/hooks/use-role';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useDashboardStore } from '@/stores/dashboard-store';
 import { useSession } from '@/lib/auth-client';
 import { formatNumber } from '@/lib/utils';
-import { TrendingUp, Landmark, BarChart3, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet, Users, CalendarDays, Filter, ArrowRight } from 'lucide-react';
+import { TrendingUp, Landmark, BarChart3, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet, Users, CalendarDays, Filter, ArrowRight, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Link } from 'react-router-dom';
 import {
@@ -21,6 +22,9 @@ import {
 } from 'recharts';                                                                                                           
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
@@ -29,6 +33,9 @@ export default function DashboardPage() {
   const { companyId } = useParams();
   const cId = parseInt(companyId || '0');
   
+  const navigate = useNavigate();
+  const { hasRole, isLoading: roleLoading } = useRole(['OWNER', 'ADMIN', 'FINANCE']);
+
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
@@ -36,17 +43,36 @@ export default function DashboardPage() {
   const { stats, fetchStats, loading, error } = useDashboardStore();
 
   useEffect(() => {
-    if (cId) {
+    if (!roleLoading && !hasRole && cId) {
+      navigate(`/company/${cId}/transactions`, { replace: true });
+    }
+  }, [roleLoading, hasRole, cId, navigate]);
+
+  useEffect(() => {
+    if (cId && !roleLoading && hasRole) {
       const year = parseInt(selectedYear);
       const month = selectedMonth === "all" ? undefined : parseInt(selectedMonth);
       fetchStats(cId, year, month);
     }
-  }, [cId, selectedYear, selectedMonth, fetchStats]);
+  }, [cId, selectedYear, selectedMonth, fetchStats, roleLoading, hasRole]);
+
+  if (roleLoading) {
+    return (
+      <div className="flex-1 flex flex-col h-full items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">กำลังตรวจสอบสิทธิ์...</p>
+      </div>
+    );
+  }
+
+  if (!hasRole) {
+    return null;
+  }
 
   if (loading && !stats) {
     return (
       <div className="flex-1 flex flex-col h-full items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">กำลังโหลดข้อมูลสรุปผล...</p>
       </div>
     );
@@ -145,7 +171,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pb-3">
             <div className={`text-xl font-bold tracking-tight ${isNetProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-              {isNetProfit ? '+' : ''}฿{formatNumber(stats.netFxGainLoss)}
+              {isNetProfit ? '+฿' : '-฿'}{formatNumber(Math.abs(stats.netFxGainLoss))}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">ผลรวม Layer 1 และ Layer 2</p>
           </CardContent>
@@ -161,7 +187,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pb-3">
             <div className={`text-lg font-bold ${stats.netLayer1 >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-              {stats.netLayer1 >= 0 ? '+' : ''}฿{formatNumber(stats.netLayer1)}
+              {stats.netLayer1 >= 0 ? '+฿' : '-฿'}{formatNumber(Math.abs(stats.netLayer1))}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">ส่วนต่างอัตราวางบิล vs วันรับเงิน</p>
           </CardContent>
@@ -177,7 +203,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pb-3">
             <div className={`text-lg font-bold ${stats.netLayer2 >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-              {stats.netLayer2 >= 0 ? '+' : ''}฿{formatNumber(stats.netLayer2)}
+              {stats.netLayer2 >= 0 ? '+฿' : '-฿'}{formatNumber(Math.abs(stats.netLayer2))}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">ส่วนต่างต้นทุน FCD vs อัตราขายจริง</p>
           </CardContent>
@@ -232,7 +258,10 @@ export default function DashboardPage() {
                         style={{ fontSize: '11px', fill: '#6B7280' }}
                     />
                     <RechartsTooltip 
-                        formatter={(value: any) => [`฿${formatNumber(Number(value))}`, undefined]}
+                        formatter={(value: any) => {
+                          const valNum = Number(value);
+                          return [`${valNum >= 0 ? '+฿' : '-฿'}${formatNumber(Math.abs(valNum))}`, undefined];
+                        }}
                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
                         cursor={{fill: '#f1f5f9'}}
                     />
@@ -278,7 +307,7 @@ export default function DashboardPage() {
                             formatter={(_value: any, name: any, props: any) => {
                                 // Show the actual positive/negative value, not the absolute used for sizing
                                 const actual = props.payload.actual;
-                                return [`${actual >= 0 ? '+' : ''}฿${formatNumber(actual)}`, name]
+                                return [`${actual >= 0 ? '+฿' : '-฿'}${formatNumber(Math.abs(actual))}`, name]
                             }}
                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
                         />
@@ -317,8 +346,8 @@ export default function DashboardPage() {
                                   </div>
                                   <span className="font-medium text-slate-700 dark:text-slate-300">{customer.name}</span>
                               </div>
-                              <div className="font-semibold text-emerald-600 dark:text-emerald-400">
-                                  +฿{formatNumber(customer.gain)}
+                              <div className={`font-semibold ${customer.gain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                  {customer.gain >= 0 ? '+฿' : '-฿'}{formatNumber(Math.abs(customer.gain))}
                               </div>
                           </div>
                       ))}
@@ -341,56 +370,56 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex-1 px-0 pb-0 overflow-auto">
-             {stats.unpaidInvoices.length > 0 ? (
-                 <div className="h-full">
-                    <table className="w-full text-xs">
-                        <thead className="sticky top-0 bg-muted/30 z-10">
-                            <tr className="border-b text-slate-500">
-                                <th className="text-left font-medium px-4 py-1.5">ลูกค้า / Invoice</th>
-                                <th className="text-right font-medium px-4 py-1.5">ยอดที่ค้าง (FCY)</th>
-                                <th className="text-right font-medium px-4 py-1.5">อายุหนี้</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+              {stats.unpaidInvoices.length > 0 ? (
+                  <div className="h-full overflow-auto rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted/30">
+                                <TableHead className="text-left font-medium px-4 py-1.5 h-8 text-[11px]">ลูกค้า / Invoice</TableHead>
+                                <TableHead className="text-right font-medium px-4 py-1.5 h-8 text-[11px]">ยอดที่ค้าง (FCY)</TableHead>
+                                <TableHead className="text-right font-medium px-4 py-1.5 h-8 text-[11px] w-[80px]">อายุหนี้</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
                             {stats.unpaidInvoices.slice(0, 5).map(inv => (
-                                <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                                    <td className="px-4 py-1.5">
+                                <TableRow key={inv.id} className="hover:bg-muted/30 transition-colors">
+                                    <TableCell className="px-4 py-1.5">
                                         <div className="font-medium text-slate-800 dark:text-slate-200">{inv.customerName}</div>
                                         <div className="text-[10px] text-muted-foreground flex gap-2 items-center mt-0.5">
                                             <span>{inv.invoiceNumber}</span>
                                             <span>•</span>
                                             <span>{format(new Date(inv.invoiceDate), 'dd MMM yyyy', { locale: th })}</span>
                                         </div>
-                                    </td>
-                                    <td className="px-4 py-1.5 text-right">
+                                    </TableCell>
+                                    <TableCell className="px-4 py-1.5 text-right">
                                         <div className="font-mono font-medium">{formatNumber(inv.pendingFcy, 2)} <span className="text-[10px] text-muted-foreground">{inv.currencyCode}</span></div>
                                         <div className="text-[10px] text-orange-600 dark:text-orange-400 mt-0.5">
                                             ~฿{formatNumber(inv.estimatedThbValue)}
                                         </div>
-                                    </td>
-                                    <td className="px-4 py-1.5 text-right">
-                                        <Badge variant={inv.agingDays > 30 ? "destructive" : "secondary"} className="text-[10px] w-14 justify-center shadow-none py-0">
+                                    </TableCell>
+                                    <TableCell className="px-4 py-1.5 text-right">
+                                        <Badge variant={inv.agingDays > 30 ? "destructive" : "secondary"} className="text-[10px] w-14 justify-center shadow-none py-0 font-normal">
                                             {inv.agingDays} วัน
                                         </Badge>
-                                    </td>
-                                </tr>
+                                    </TableCell>
+                                </TableRow>
                             ))}
-                        </tbody>
-                    </table>
-                 </div>
-             ) : (
-                 <div className="py-6 text-center text-muted-foreground flex flex-col items-center">
-                     <span className="text-3xl mb-1">🎉</span>
-                     <span className="text-xs">สุดยอด! ไม่มีลูกหนี้ค้างชำระ</span>
-                 </div>
-             )}
-             {stats.unpaidInvoices.length > 5 && (
-                 <div className="p-3 border-t bg-muted/10 text-center">
-                     <Link to={`/company/${cId}/outstanding`} className="text-xs text-primary hover:underline font-medium flex items-center justify-center gap-1">
-                         ดูใบแจ้งหนี้ทั้งหมด ({stats.unpaidInvoices.length}) <ArrowRight className="h-3 w-3" />
-                     </Link>
-                 </div>
-             )}
+                        </TableBody>
+                    </Table>
+                  </div>
+              ) : (
+                  <div className="py-6 text-center text-muted-foreground flex flex-col items-center">
+                      <span className="text-3xl mb-1">🎉</span>
+                      <span className="text-xs">สุดยอด! ไม่มีลูกหนี้ค้างชำระ</span>
+                  </div>
+              )}
+              {stats.totalUnpaidCount >= 5 && (
+                  <div className="p-3 border-t bg-muted/10 text-center shrink-0">
+                      <Link to={`/company/${cId}/outstanding`} className="text-xs text-primary hover:underline font-medium flex items-center justify-center gap-1">
+                          ดูใบแจ้งหนี้ทั้งหมด ({stats.totalUnpaidCount}) <ArrowRight className="h-3 w-3" />
+                      </Link>
+                  </div>
+              )}
           </CardContent>
         </Card>
 

@@ -10,8 +10,8 @@ auditLogRoutes.use('*', requireCompanyRole(['OWNER', 'ADMIN']));
 
 // GET /api/audit-logs
 auditLogRoutes.get('/', async (c) => {
-    const page = parseInt(c.req.query('page') || '1');
-    const limit = parseInt(c.req.query('limit') || '50');
+    const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+    const limit = Math.min(500, Math.max(1, parseInt(c.req.query('limit') || '50')));
 
     // The middleware ensures companyUser exists and has the right role
     const companyUser = c.get('companyUser');

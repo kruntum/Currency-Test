@@ -64,6 +64,14 @@ dashboardRoutes.get('/:companyId/stats', requireCompanyRole(['OWNER', 'ADMIN', '
 
         // 3. Fetch Pending Invoices (for Overdue tracking)
         // A pending invoice is a transaction whose status is NOT PAID
+        // Optimize: Count all pending first, then only fetch top 5 for the dashboard listing
+        const totalUnpaidCount = await prisma.transaction.count({
+            where: {
+                companyId,
+                paymentStatus: { not: 'PAID' }
+            }
+        });
+
         const pendingTransactions = await prisma.transaction.findMany({
             where: {
                 companyId,
@@ -72,7 +80,8 @@ dashboardRoutes.get('/:companyId/stats', requireCompanyRole(['OWNER', 'ADMIN', '
             include: {
                 customer: { select: { name: true } }
             },
-            orderBy: { invoiceDate: 'asc' } // Oldest first
+            orderBy: { invoiceDate: 'asc' }, // Oldest first
+            take: 5
         });
 
         // 4. Fetch FCD Pools (for current exposure)
@@ -185,7 +194,8 @@ dashboardRoutes.get('/:companyId/stats', requireCompanyRole(['OWNER', 'ADMIN', '
             topCustomers,
             currentExposure,
             totalFcdValueThb,
-            unpaidInvoices
+            unpaidInvoices,
+            totalUnpaidCount
         });
 
     } catch (error) {
