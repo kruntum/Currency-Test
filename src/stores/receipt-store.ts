@@ -13,6 +13,11 @@ export interface PaymentAllocation {
         declarationNumber: string;
         currencyCode: string;
     };
+    receipt?: {
+        id: number;
+        receivedDate: string;
+        bankReference: string | null;
+    };
 }
 
 export interface Receipt {

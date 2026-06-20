@@ -502,7 +502,8 @@ export default function TransactionPage() {
                                     <Table className="text-xs">
                                       <TableHeader className="bg-muted/10">
                                         <TableRow className="hover:bg-transparent">
-                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-left">เลขที่ใบรับเงิน (Receipt No.)</TableHead>
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-left">ใบรับเงิน (Receipt ID)</TableHead>
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-left">อ้างอิงธนาคาร (Bank Ref.)</TableHead>
                                           <TableHead className="h-7 py-0 px-3 text-[10px] text-left">วันที่รับเงิน</TableHead>
                                           <TableHead className="h-7 py-0 px-3 text-[10px] text-right">ยอดเงินตัดชำระ (Applied THB)</TableHead>
                                           <TableHead className="h-7 py-0 px-3 text-[10px] text-right">ยอดค้างชำระเดิม (Invoice THB)</TableHead>
@@ -512,7 +513,8 @@ export default function TransactionPage() {
                                       <TableBody>
                                         {tx.allocations.map((alloc: any) => (
                                           <TableRow key={alloc.id} className="hover:bg-muted/20">
-                                            <TableCell className="py-1.5 px-3 font-medium text-[11px]">{alloc.receipt?.receiptNumber || `ID: ${alloc.receiptId}`}</TableCell>
+                                            <TableCell className="py-1.5 px-3 font-medium text-[11px]">Receipt #{alloc.receiptId}</TableCell>
+                                            <TableCell className="py-1.5 px-3 text-[11px] font-mono text-muted-foreground">{alloc.receipt?.bankReference || '-'}</TableCell>
                                             <TableCell className="py-1.5 px-3 text-[11px]">{alloc.receipt?.receivedDate ? formatDate(alloc.receipt.receivedDate) : '-'}</TableCell>
                                             <TableCell className="py-1.5 px-3 text-right text-[11px] font-semibold text-green-600">฿{formatNumber(alloc.appliedThb)}</TableCell>
                                             <TableCell className="py-1.5 px-3 text-right text-[11px] text-muted-foreground">฿{formatNumber(alloc.invoiceThb)}</TableCell>
