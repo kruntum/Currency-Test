@@ -139,6 +139,7 @@ export default function ReceiptPage() {
                       <TableHead className="w-12 text-center py-2 h-9 text-xs font-medium">#</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">วันที่รับ</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">ลูกค้า (Customer)</TableHead>
+                      <TableHead className="py-2 h-9 text-xs font-medium">เลขที่รับเงิน</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">อ้างอิงธนาคาร</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">สกุลเงิน</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium text-right">ยอดรับ (FCY)</TableHead>
@@ -150,17 +151,17 @@ export default function ReceiptPage() {
                   <TableBody>
                     {pagedReceipts.map((rcpt, index) => (
                       <TableRow key={rcpt.id} className="hover:bg-muted/30 transition-colors">
-                        <TableCell className="text-center font-medium text-xs py-1.5 h-10">
-                          <div className="flex flex-col items-center justify-center">
-                            <span className="text-muted-foreground text-[10px]">{(page - 1) * perPage + index + 1}</span>
-                            <span className="text-[10px] text-primary/80 font-mono font-semibold">#{rcpt.id}</span>
-                          </div>
+                        <TableCell className="text-center text-muted-foreground text-xs py-1.5 h-10">
+                          {(page - 1) * perPage + index + 1}
                         </TableCell>
                         <TableCell className="text-xs py-1.5 h-10">
                           {format(new Date(rcpt.receivedDate), 'd MMM yyyy', { locale: th })}
                         </TableCell>
                         <TableCell className="font-medium text-sm py-1.5 h-10">
                           {rcpt.customer?.name || '-'}
+                        </TableCell>
+                        <TableCell className="font-semibold font-mono text-xs py-1.5 h-10 text-primary/90">
+                          Receipt #{rcpt.id}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground py-1.5 h-10">
                           {rcpt.bankReference || '-'}
