@@ -43,6 +43,7 @@ export interface Transaction {
     user?: { id: string; name: string; email: string };
     currency?: { code: string; nameTh: string; nameEn: string; symbol: string };
     invoices?: Invoice[];
+    allocations?: any[];
     _count?: { invoices: number };
 }
 

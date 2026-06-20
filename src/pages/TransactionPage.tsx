@@ -27,6 +27,7 @@ import { Plus, Loader2, Search, FileText, Pencil, Trash2, ChevronDown, ChevronRi
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatNumber } from '@/lib/utils';
+import { useReceiptStore } from '@/stores/receipt-store';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PaymentStatusBadge } from '@/components/payment-status-badge';
@@ -56,6 +57,19 @@ export default function TransactionPage() {
   const [expandedTxIds, setExpandedTxIds] = useState<Set<number>>(new Set());
   const [expandedInvIds, setExpandedInvIds] = useState<Set<number>>(new Set());
   const [yearOpen, setYearOpen] = useState(false);
+
+  const { deleteAllocation } = useReceiptStore();
+
+  const handleRemoveAllocation = async (allocId: number) => {
+    if (!window.confirm('คุณต้องการยกเลิกการตัดชำระเงินนี้ใช่หรือไม่? การยกเลิกจะคืนยอดเงินเข้า FCD Wallet')) return;
+    try {
+      await deleteAllocation(allocId, cId);
+      toast.success('ยกเลิกการตัดชำระเงินสำเร็จ');
+      fetchTransactions(pagination.page);
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
   useEffect(() => {
     if (companyId) {
@@ -478,6 +492,50 @@ export default function TransactionPage() {
                                     ))}
                                   </TableBody>
                                 </Table>
+
+                                {/* Allocations Section */}
+                                {tx.allocations && tx.allocations.length > 0 && (
+                                  <div className="mt-4 border rounded-md overflow-hidden bg-background">
+                                    <div className="bg-muted/30 px-3 py-1.5 border-b text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                      ประวัติการตัดชำระเงิน (Payment Allocations)
+                                    </div>
+                                    <Table className="text-xs">
+                                      <TableHeader className="bg-muted/10">
+                                        <TableRow className="hover:bg-transparent">
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-left">เลขที่ใบรับเงิน (Receipt No.)</TableHead>
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-left">วันที่รับเงิน</TableHead>
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-right">ยอดเงินตัดชำระ (Applied THB)</TableHead>
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] text-right">ยอดค้างชำระเดิม (Invoice THB)</TableHead>
+                                          <TableHead className="h-7 py-0 px-3 text-[10px] w-[50px] text-center">จัดการ</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {tx.allocations.map((alloc: any) => (
+                                          <TableRow key={alloc.id} className="hover:bg-muted/20">
+                                            <TableCell className="py-1.5 px-3 font-medium text-[11px]">{alloc.receipt?.receiptNumber || `ID: ${alloc.receiptId}`}</TableCell>
+                                            <TableCell className="py-1.5 px-3 text-[11px]">{alloc.receipt?.receivedDate ? formatDate(alloc.receipt.receivedDate) : '-'}</TableCell>
+                                            <TableCell className="py-1.5 px-3 text-right text-[11px] font-semibold text-green-600">฿{formatNumber(alloc.appliedThb)}</TableCell>
+                                            <TableCell className="py-1.5 px-3 text-right text-[11px] text-muted-foreground">฿{formatNumber(alloc.invoiceThb)}</TableCell>
+                                            <TableCell className="py-1.5 px-3 text-center">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-5 w-5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                title="ยกเลิกการตัดชำระเงิน"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleRemoveAllocation(alloc.id);
+                                                }}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>

@@ -99,6 +99,9 @@ transactionRoutes.get('/', async (c) => {
                     include: { items: { orderBy: { itemNo: 'asc' } } },
                     orderBy: { id: 'asc' },
                 },
+                allocations: {
+                    include: { receipt: true }
+                },
                 _count: { select: { invoices: true, allocations: true } },
             },
             orderBy: { createdAt: 'desc' },
