@@ -15,7 +15,8 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { PageHeader } from '@/components/page-header';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, calculateTransactionTotals } from '@/lib/utils';
+import { useCompanyStore } from '@/stores/company-store';
 import { format } from 'date-fns';
 import {
   Plus, Trash2, Loader2, ChevronDown, ChevronRight, FileText, Save, ArrowLeft,
@@ -47,6 +48,16 @@ export default function TransactionFormPage() {
   const { companyId, transactionId } = useParams();
   const navigate = useNavigate();
   const { createTransaction, updateTransaction, fetchTransaction } = useTransactionStore();
+  const { companies, fetchCompanies } = useCompanyStore();
+  const activeCompany = companies.find((c) => c.id === parseInt(companyId || '0'));
+  const roundingMethod = activeCompany?.roundingMethod || 'ITEM_ROUNDING';
+
+  useEffect(() => {
+    if (companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [companies, fetchCompanies]);
+
   const { rate, loading: rateLoading, fetchRate } = useExchangeRate();
   const isEdit = !!transactionId;
 
@@ -188,14 +199,11 @@ export default function TransactionFormPage() {
   };
 
   // Calculate totals
-  const invoiceTotals = invoices.map((inv) => {
-    const totalForeign = inv.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0);
-    const totalThb = inv.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0) * rateNum, 0);
-    return { totalForeign, totalThb, itemCount: inv.items.length };
-  });
-
-  const grandTotalForeign = invoiceTotals.reduce((sum, t) => sum + t.totalForeign, 0);
-  const grandTotalThb = invoiceTotals.reduce((sum, t) => sum + t.totalThb, 0);
+  const { invoiceTotals, grandTotalForeign, grandTotalThb } = calculateTransactionTotals(
+    invoices,
+    rateNum,
+    roundingMethod
+  );
 
   // Submit
   const handleSave = async () => {

@@ -7,6 +7,7 @@ export interface Company {
     address: string | null;
     phone: string | null;
     status: string;
+    roundingMethod: string;
     createdBy: string;
     createdAt: string;
     updatedAt: string;
@@ -34,8 +35,8 @@ interface CompanyState {
     error: string | null;
 
     fetchCompanies: () => Promise<void>;
-    createCompany: (data: { name: string; taxId?: string; address?: string; phone?: string }) => Promise<Company>;
-    updateCompany: (id: number, data: { name: string; taxId?: string; address?: string; phone?: string }) => Promise<Company>;
+    createCompany: (data: { name: string; taxId?: string; address?: string; phone?: string; roundingMethod?: string }) => Promise<Company>;
+    updateCompany: (id: number, data: { name: string; taxId?: string; address?: string; phone?: string; roundingMethod?: string }) => Promise<Company>;
     deleteCompany: (id: number) => Promise<void>;
 
     companyMembers: Record<number, CompanyUser[]>; // mapped by companyId

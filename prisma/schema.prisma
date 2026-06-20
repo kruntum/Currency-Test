@@ -138,10 +138,11 @@ model Company {
   taxId     String?  @map("tax_id")
   address   String?
   phone     String?
-  status    String   @default("active") // "active" | "cancelled"
-  createdBy String   @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  status          String   @default("active") // "active" | "cancelled"
+  roundingMethod  String   @default("ITEM_ROUNDING") @map("rounding_method") // "ITEM_ROUNDING" | "TOTAL_ROUNDING"
+  createdBy       String   @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   user         User                @relation(fields: [createdBy], references: [id])
   transactions Transaction[]

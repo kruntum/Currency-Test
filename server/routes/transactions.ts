@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import type { AppEnv } from '../types.js';
 import { requireCompanyRole } from '../middleware/companyAuth.js';
 import { logAuditData } from '../services/audit-service.js';
+import { calculateTransactionTotals } from '../utils/calculations.js';
 
 const transactionRoutes = new Hono<AppEnv>();
 
@@ -160,48 +161,35 @@ transactionRoutes.post('/', async (c) => {
     const companyId = companyUser!.companyId;
     const rate = parseFloat(data.exchangeRate);
 
-    // Calculate totals
-    let totalForeign = 0;
-    let totalThb = 0;
-
-    const invoicesData = data.invoices.map((inv) => {
-        let invForeign = 0;
-        let invThb = 0;
-
-        const items = inv.items.map((item, idx) => {
-            const price = parseFloat(item.price);
-            const totalPrice = parseFloat(item.totalPrice);
-            const priceTHB = Math.round(price * rate * 100) / 100;
-            const totalPriceTHB = Math.round(totalPrice * rate * 100) / 100;
-
-            invForeign += totalPrice;
-            invThb += totalPriceTHB;
-
-            return {
-                itemNo: idx + 1,
-                goodsName: item.goodsName,
-                netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
-                price,
-                priceTHB,
-                totalPrice,
-                totalPriceTHB,
-            };
-        });
-
-        totalForeign += invForeign;
-        totalThb += invThb;
-
-        return {
-            invoiceNumber: inv.invoiceNumber,
-            invoiceDate: new Date(inv.invoiceDate),
-            currencyCode: data.currencyCode,
-            totalForeign: invForeign,
-            totalThb: invThb,
-            companyId,
-            createdBy: user.id,
-            items,
-        };
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { roundingMethod: true },
     });
+    const roundingMethod = company?.roundingMethod || 'ITEM_ROUNDING';
+
+    const rawInvoices = data.invoices.map((inv) => ({
+        invoiceNumber: inv.invoiceNumber,
+        invoiceDate: new Date(inv.invoiceDate),
+        items: inv.items.map((item) => ({
+            goodsName: item.goodsName,
+            netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
+            price: parseFloat(item.price),
+            totalPrice: parseFloat(item.totalPrice),
+        })),
+    }));
+
+    const calculated = calculateTransactionTotals({
+        invoices: rawInvoices,
+        exchangeRate: rate,
+        currencyCode: data.currencyCode,
+        companyId,
+        userId: user.id,
+        roundingMethod,
+    });
+
+    const totalForeign = calculated.grandTotalForeign;
+    const totalThb = calculated.grandTotalThb;
+    const invoicesData = calculated.invoices;
 
     const tx = await prisma.transaction.create({
         data: {
@@ -231,7 +219,15 @@ transactionRoutes.post('/', async (c) => {
                     companyId: inv.companyId,
                     createdBy: inv.createdBy,
                     items: {
-                        create: inv.items,
+                        create: inv.items.map((it, idx) => ({
+                            itemNo: idx + 1,
+                            goodsName: it.goodsName,
+                            netWeight: it.netWeight,
+                            price: it.price,
+                            priceTHB: it.priceTHB,
+                            totalPrice: it.totalPrice,
+                            totalPriceTHB: it.totalPriceTHB,
+                        })),
                     },
                 })),
             },
@@ -289,47 +285,35 @@ transactionRoutes.put('/:id', async (c) => {
     const data = result.data;
     const rate = parseFloat(data.exchangeRate);
 
-    let totalForeign = 0;
-    let totalThb = 0;
-
-    const invoicesData = data.invoices.map((inv) => {
-        let invForeign = 0;
-        let invThb = 0;
-
-        const items = inv.items.map((item, idx) => {
-            const price = parseFloat(item.price);
-            const totalPrice = parseFloat(item.totalPrice);
-            const priceTHB = Math.round(price * rate * 100) / 100;
-            const totalPriceTHB = Math.round(totalPrice * rate * 100) / 100;
-
-            invForeign += totalPrice;
-            invThb += totalPriceTHB;
-
-            return {
-                itemNo: idx + 1,
-                goodsName: item.goodsName,
-                netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
-                price,
-                priceTHB,
-                totalPrice,
-                totalPriceTHB,
-            };
-        });
-
-        totalForeign += invForeign;
-        totalThb += invThb;
-
-        return {
-            invoiceNumber: inv.invoiceNumber,
-            invoiceDate: new Date(inv.invoiceDate),
-            currencyCode: data.currencyCode,
-            totalForeign: invForeign,
-            totalThb: invThb,
-            companyId,
-            createdBy: user.id,
-            items,
-        };
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { roundingMethod: true },
     });
+    const roundingMethod = company?.roundingMethod || 'ITEM_ROUNDING';
+
+    const rawInvoices = data.invoices.map((inv) => ({
+        invoiceNumber: inv.invoiceNumber,
+        invoiceDate: new Date(inv.invoiceDate),
+        items: inv.items.map((item) => ({
+            goodsName: item.goodsName,
+            netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
+            price: parseFloat(item.price),
+            totalPrice: parseFloat(item.totalPrice),
+        })),
+    }));
+
+    const calculated = calculateTransactionTotals({
+        invoices: rawInvoices,
+        exchangeRate: rate,
+        currencyCode: data.currencyCode,
+        companyId,
+        userId: user.id,
+        roundingMethod,
+    });
+
+    const totalForeign = calculated.grandTotalForeign;
+    const totalThb = calculated.grandTotalThb;
+    const invoicesData = calculated.invoices;
 
     // Handle payment status protection (cannot reduce transaction total below what's already paid)
     if (totalThb < existing.paidThb.toNumber()) {
@@ -374,7 +358,17 @@ transactionRoutes.put('/:id', async (c) => {
                         totalThb: inv.totalThb,
                         companyId: inv.companyId,
                         createdBy: inv.createdBy,
-                        items: { create: inv.items },
+                        items: {
+                            create: inv.items.map((it, idx) => ({
+                                itemNo: idx + 1,
+                                goodsName: it.goodsName,
+                                netWeight: it.netWeight,
+                                price: it.price,
+                                priceTHB: it.priceTHB,
+                                totalPrice: it.totalPrice,
+                                totalPriceTHB: it.totalPriceTHB,
+                            })),
+                        },
                     })),
                 },
             },

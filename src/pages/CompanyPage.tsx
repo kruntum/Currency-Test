@@ -17,6 +17,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -81,6 +88,7 @@ export default function CompanyPage() {
   const [formTaxId, setFormTaxId] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formRoundingMethod, setFormRoundingMethod] = useState('ITEM_ROUNDING');
 
   useEffect(() => {
     fetchCompanies();
@@ -91,6 +99,7 @@ export default function CompanyPage() {
     setFormTaxId('');
     setFormAddress('');
     setFormPhone('');
+    setFormRoundingMethod('ITEM_ROUNDING');
     setEditingCompany(null);
   };
 
@@ -105,6 +114,7 @@ export default function CompanyPage() {
     setFormTaxId(company.taxId || '');
     setFormAddress(company.address || '');
     setFormPhone(company.phone || '');
+    setFormRoundingMethod(company.roundingMethod || 'ITEM_ROUNDING');
     setDialogOpen(true);
   };
 
@@ -131,6 +141,7 @@ export default function CompanyPage() {
         taxId: formTaxId.trim() || undefined,
         address: formAddress.trim() || undefined,
         phone: formPhone.trim() || undefined,
+        roundingMethod: formRoundingMethod,
       };
 
       if (editingCompany) {
@@ -365,6 +376,25 @@ export default function CompanyPage() {
                 value={formPhone}
                 onChange={(e) => setFormPhone(e.target.value)}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="company-rounding-method">วิธีการปัดเศษทศนิยม (Rounding Method)</Label>
+              <Select
+                value={formRoundingMethod}
+                onValueChange={setFormRoundingMethod}
+              >
+                <SelectTrigger id="company-rounding-method">
+                  <SelectValue placeholder="เลือกวิธีการคำนวณและปัดเศษ" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ITEM_ROUNDING">
+                    ปัดเศษทศนิยมแยกรายชิ้น (Item-by-Item Rounding)
+                  </SelectItem>
+                  <SelectItem value="TOTAL_ROUNDING">
+                    คำนวณจากยอดรวม (Total Rounding)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

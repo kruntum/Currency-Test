@@ -11,6 +11,7 @@ const companySchema = z.object({
     taxId: z.string().optional(),
     address: z.string().optional(),
     phone: z.string().optional(),
+    roundingMethod: z.enum(['ITEM_ROUNDING', 'TOTAL_ROUNDING']).optional(),
 });
 
 // GET /api/companies — List active companies for current user
@@ -90,6 +91,7 @@ companyRoutes.post('/', async (c) => {
             taxId: data.taxId || null,
             address: data.address || null,
             phone: data.phone || null,
+            roundingMethod: data.roundingMethod || 'ITEM_ROUNDING',
             createdBy: user.id,
             companyUsers: {
                 create: {
@@ -142,6 +144,7 @@ companyRoutes.put('/:id', async (c) => {
             taxId: data.taxId || null,
             address: data.address || null,
             phone: data.phone || null,
+            roundingMethod: data.roundingMethod,
         },
         include: {
             user: { select: { id: true, name: true, email: true } },

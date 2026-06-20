@@ -9,7 +9,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, calculateInvoiceTotals } from '@/lib/utils';
 
 export interface FormItem {
   goodsName: string;
@@ -33,6 +33,7 @@ interface InvoiceCardProps {
   currencyCode: string;
   currencySymbol: string;
   exchangeRate: number;
+  roundingMethod?: string;
   canDelete: boolean;
   onUpdate: (field: keyof FormInvoice, value: string) => void;
   onToggle: () => void;
@@ -43,15 +44,15 @@ interface InvoiceCardProps {
 }
 
 export function InvoiceCard({
-  invoice, index, currencyCode, currencySymbol, exchangeRate,
+  invoice, index, currencyCode, currencySymbol, exchangeRate, roundingMethod = 'ITEM_ROUNDING',
   canDelete, onUpdate, onToggle, onRemove, onAddItem, onRemoveItem, onUpdateItem,
 }: InvoiceCardProps) {
   const calcThb = useCallback((price: string) => {
     return ((parseFloat(price) || 0) * exchangeRate).toFixed(2);
   }, [exchangeRate]);
 
-  const totalForeign = invoice.items.reduce((s, i) => s + (parseFloat(i.totalPrice) || 0), 0);
-  const totalThb = invoice.items.reduce((s, i) => s + (parseFloat(i.totalPrice) || 0) * exchangeRate, 0);
+  const { totalForeign, totalThb } = calculateInvoiceTotals(invoice.items, exchangeRate, roundingMethod);
+
 
   return (
     <div className="border rounded-lg bg-card">

@@ -19,7 +19,8 @@ import {
 import { Plus, Loader2, Save, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, calculateTransactionTotals } from '@/lib/utils';
+import { useCompanyStore } from '@/stores/company-store';
 
 interface Currency {
   code: string; nameTh: string; nameEn: string; symbol: string;
@@ -39,6 +40,16 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
   const { createTransaction, updateTransaction, fetchTransaction } = useTransactionStore();
   const { rate, loading: rateLoading, fetchRate } = useExchangeRate();
   const { fetchCustomers } = useCustomerStore();
+  const { companies, fetchCompanies } = useCompanyStore();
+  const activeCompany = companies.find((c) => c.id === companyId);
+  const roundingMethod = activeCompany?.roundingMethod || 'ITEM_ROUNDING';
+
+  useEffect(() => {
+    if (open && companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [open, companies, fetchCompanies]);
+
   const isEdit = !!editId;
 
   const [declarationNumber, setDeclarationNumber] = useState('');
@@ -186,10 +197,11 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
   };
 
   // Totals
-  const grandTotalForeign = invoices.reduce((s, inv) =>
-    s + inv.items.reduce((si, item) => si + (parseFloat(item.totalPrice) || 0), 0), 0);
-  const grandTotalThb = invoices.reduce((s, inv) =>
-    s + inv.items.reduce((si, item) => si + (parseFloat(item.totalPrice) || 0) * rateNum, 0), 0);
+  const { grandTotalForeign, grandTotalThb } = calculateTransactionTotals(
+    invoices,
+    rateNum,
+    roundingMethod
+  );
 
   // Submit
   const handleSave = async () => {
@@ -357,6 +369,7 @@ export function TransactionDialog({ open, onOpenChange, companyId, editId, onSav
                     currencyCode={currencyCode}
                     currencySymbol={currSymbol}
                     exchangeRate={rateNum}
+                    roundingMethod={roundingMethod}
                     canDelete={invoices.length > 1}
                     onUpdate={(field, value) => updateInvoice(idx, field, value)}
                     onToggle={() => toggleInvoice(idx)}
