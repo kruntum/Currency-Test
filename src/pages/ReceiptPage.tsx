@@ -139,7 +139,7 @@ export default function ReceiptPage() {
                       <TableHead className="w-12 text-center py-2 h-9 text-xs font-medium">#</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">วันที่รับ</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">ลูกค้า (Customer)</TableHead>
-                      <TableHead className="py-2 h-9 text-xs font-medium">เลขที่รับเงิน</TableHead>
+                      <TableHead className="py-2 h-9 text-xs font-medium">เลขที่รับเงิน (Receipt ID)</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">อ้างอิงธนาคาร</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium">สกุลเงิน</TableHead>
                       <TableHead className="py-2 h-9 text-xs font-medium text-right">ยอดรับ (FCY)</TableHead>
