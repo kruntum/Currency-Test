@@ -61,7 +61,10 @@ export default function ReceiptPage() {
     ? receipts.filter((r) =>
         (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (r.bankReference || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (r.currencyCode || '').toLowerCase().includes(searchQuery.toLowerCase())
+        (r.currencyCode || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(r.id).includes(searchQuery.toLowerCase()) ||
+        `receipt #${r.id}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        `#${r.id}`.includes(searchQuery.toLowerCase())
       )
     : receipts;
 
@@ -147,8 +150,11 @@ export default function ReceiptPage() {
                   <TableBody>
                     {pagedReceipts.map((rcpt, index) => (
                       <TableRow key={rcpt.id} className="hover:bg-muted/30 transition-colors">
-                        <TableCell className="text-center text-muted-foreground text-xs py-1.5 h-10">
-                          {(page - 1) * perPage + index + 1}
+                        <TableCell className="text-center font-medium text-xs py-1.5 h-10">
+                          <div className="flex flex-col items-center justify-center">
+                            <span className="text-muted-foreground text-[10px]">{(page - 1) * perPage + index + 1}</span>
+                            <span className="text-[10px] text-primary/80 font-mono font-semibold">#{rcpt.id}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-xs py-1.5 h-10">
                           {format(new Date(rcpt.receivedDate), 'd MMM yyyy', { locale: th })}
