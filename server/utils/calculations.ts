@@ -3,6 +3,7 @@ export interface RawInvoiceItem {
     netWeight: number | null;
     price: number;
     totalPrice: number;
+    itemNo?: number | null;
 }
 
 export interface RawInvoice {
@@ -18,6 +19,7 @@ export interface CalculatedItem {
     priceTHB: number;
     totalPrice: number;
     totalPriceTHB: number;
+    itemNo?: number | null;
 }
 
 export interface CalculatedInvoice {
@@ -76,6 +78,7 @@ export function calculateTransactionTotals(params: {
                 priceTHB,
                 totalPrice,
                 totalPriceTHB,
+                itemNo: item.itemNo,
             };
         });
 

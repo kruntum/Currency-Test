@@ -32,9 +32,9 @@ export function CustomerCombobox({ companyId, value, onChange, className, disabl
   const [searchQuery, setSearchQuery] = React.useState('');
   const [creating, setCreating] = React.useState(false);
 
-  // Fetch customers on mount if empty for this company
+  // Fetch customers on mount if not yet loaded for this company
   React.useEffect(() => {
-    if (companyId && (!customers[companyId] || customers[companyId].length === 0)) {
+    if (companyId && customers[companyId] === undefined) {
       fetchCustomers(companyId);
     }
   }, [companyId, customers, fetchCustomers]);

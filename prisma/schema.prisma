@@ -88,6 +88,7 @@ model Currency {
   fcdHoldingPools FCDHoldingPool[]
   exchangeLogs    ExchangeLog[]
   receipts        Receipt[]
+  exchangeRates   ExchangeRate[]
 
   @@map("currencies")
 }
@@ -140,6 +141,7 @@ model Company {
   phone     String?
   status          String   @default("active") // "active" | "cancelled"
   roundingMethod  String   @default("ITEM_ROUNDING") @map("rounding_method") // "ITEM_ROUNDING" | "TOTAL_ROUNDING"
+  excelMapping    Json?    @map("excel_mapping")
   createdBy       String   @map("created_by")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -398,4 +400,29 @@ model AuditLog {
   @@index([userId])
   @@index([entity, entityId])
   @@map("audit_logs")
+}
+
+model ExchangeRate {
+  id             Int      @id @default(autoincrement())
+  currencyCode   String   @map("currency_code")
+  rateDate       DateTime @map("rate_date") // วันที่ประกาศเรท
+  buyingTransfer Decimal  @map("buying_transfer") @db.Decimal(18, 6)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  currency       Currency @relation(fields: [currencyCode], references: [code], onDelete: Cascade)
+
+  @@unique([currencyCode, rateDate])
+  @@index([currencyCode, rateDate])
+  @@map("exchange_rates")
+}
+
+// ตารางเก็บ config ของระบบแบบ key-value
+// ใช้สำหรับตั้งค่าต่างๆ ที่ admin ต้องการเปลี่ยนได้ผ่าน UI
+// โดยไม่ต้อง restart server หรือแก้ .env
+model SystemConfig {
+  key       String   @id  // ชื่อ config เช่น "exchange_rate_sync_hour"
+  value     String        // ค่า config (เก็บเป็น string ทั้งหมด แปลงตอนใช้งาน)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
 }

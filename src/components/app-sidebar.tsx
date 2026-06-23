@@ -9,6 +9,9 @@ import {
   Landmark,
   UserSquare2,
   History,
+  FileSpreadsheet,
+  CalendarDays,
+  Settings2,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -32,22 +35,34 @@ import { RoleProtect } from "@/components/role-protect"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
-  const { companyId } = useParams()
+  const { companyId: urlCompanyId } = useParams()
   const { data: session } = useSession()
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'admin'
 
+  // Save last active company ID to local storage if present in URL
+  React.useEffect(() => {
+    if (urlCompanyId) {
+      localStorage.setItem('lastActiveCompanyId', urlCompanyId);
+    }
+  }, [urlCompanyId]);
+
+  const effectiveCompanyId = urlCompanyId || localStorage.getItem('lastActiveCompanyId');
+
   // Company-scoped navigation items
-  const navItems: { title: string; url: string; icon: React.ComponentType<any>; allowedRoles?: string[]; exact?: boolean }[] = companyId
+  const navItems: { title: string; url: string; icon: React.ComponentType<any>; allowedRoles?: string[]; exact?: boolean }[] = effectiveCompanyId
     ? [
-        { title: "แดชบอร์ด", url: `/company/${companyId}`, icon: LayoutDashboard, allowedRoles: ["OWNER", "ADMIN", "FINANCE"], exact: true },
-        { title: "ลูกค้า", url: `/company/${companyId}/customers`, icon: UserSquare2 },
-        { title: "รายการ (Transactions)", url: `/company/${companyId}/transactions`, icon: FileText },
-        { title: "ลูกหนี้คงค้าง", url: `/company/${companyId}/outstanding`, icon: Users, allowedRoles: ["OWNER", "ADMIN", "FINANCE"] },
-        { title: "รับเงิน", url: `/company/${companyId}/receipts`, icon: ArrowDownToLine },
-        { title: "คลัง (FCD)", url: `/company/${companyId}/treasury`, icon: Landmark, allowedRoles: ["OWNER", "ADMIN", "FINANCE"] },
+        { title: "แดชบอร์ด", url: `/company/${effectiveCompanyId}`, icon: LayoutDashboard, allowedRoles: ["OWNER", "ADMIN", "FINANCE"], exact: true },
+        { title: "ลูกค้า", url: `/company/${effectiveCompanyId}/customers`, icon: UserSquare2 },
+        { title: "รายการ (Transactions)", url: `/company/${effectiveCompanyId}/transactions`, icon: FileText },
+        { title: "นำเข้าใบขน Excel", url: `/company/${effectiveCompanyId}/import-transactions`, icon: FileSpreadsheet, allowedRoles: ["OWNER", "ADMIN", "DATA_ENTRY"] },
+        { title: "ลูกหนี้คงค้าง", url: `/company/${effectiveCompanyId}/outstanding`, icon: Users, allowedRoles: ["OWNER", "ADMIN", "FINANCE"] },
+        { title: "รับเงิน", url: `/company/${effectiveCompanyId}/receipts`, icon: ArrowDownToLine },
+        { title: "คลัง (FCD)", url: `/company/${effectiveCompanyId}/treasury`, icon: Landmark, allowedRoles: ["OWNER", "ADMIN", "FINANCE"] },
+        { title: "ปฏิทินอัตราแลกเปลี่ยน", url: `/company/${effectiveCompanyId}/exchange-rates`, icon: CalendarDays },
         ...(isAdmin ? [
           { title: "ผู้ใช้", url: "/admin/users", icon: Users },
           { title: "สกุลเงิน", url: "/admin/currencies", icon: Coins },
+          { title: "ตั้งค่า Auto Sync", url: "/admin/exchange-rates", icon: Settings2 },
         ] : []),
       ]
     : [
@@ -55,6 +70,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ...(isAdmin ? [
           { title: "ผู้ใช้", url: "/admin/users", icon: Users },
           { title: "สกุลเงิน", url: "/admin/currencies", icon: Coins },
+          { title: "ตั้งค่า Auto Sync", url: "/admin/exchange-rates", icon: Settings2 },
         ] : []),
       ];
 
@@ -95,11 +111,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
               return content;
             })}
-            {companyId && (
+            {effectiveCompanyId && (
                 <RoleProtect allowedRoles={['OWNER', 'ADMIN']}>
                     <SidebarMenuItem>
-                        <SidebarMenuButton asChild isActive={location.pathname === `/company/${companyId}/audit-logs`} tooltip="ประวัติการแก้ไข">
-                            <Link to={`/company/${companyId}/audit-logs`}>
+                        <SidebarMenuButton asChild isActive={location.pathname === `/company/${effectiveCompanyId}/audit-logs`} tooltip="ประวัติการแก้ไข">
+                            <Link to={`/company/${effectiveCompanyId}/audit-logs`}>
                                 <History />
                                 <span>ประวัติข้อมูล (Audit)</span>
                             </Link>

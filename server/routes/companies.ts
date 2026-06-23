@@ -305,3 +305,23 @@ companyRoutes.delete('/:companyId/users/:userId', requireCompanyRole(['OWNER', '
         return c.json({ error: 'Member not found' }, 404);
     }
 });
+
+// PUT /api/companies/:companyId/excel-mapping
+companyRoutes.put('/:companyId/excel-mapping', requireCompanyRole(['OWNER', 'ADMIN', 'FINANCE', 'DATA_ENTRY']), async (c) => {
+    const companyId = parseInt(c.req.param('companyId'));
+    const body = await c.req.json();
+    const { mapping } = body as { mapping: any };
+
+    if (!mapping || typeof mapping !== 'object') {
+        return c.json({ error: 'Invalid mapping object' }, 400);
+    }
+
+    const company = await prisma.company.update({
+        where: { id: companyId },
+        data: {
+            excelMapping: mapping
+        }
+    });
+
+    return c.json({ data: company });
+});

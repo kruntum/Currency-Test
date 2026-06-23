@@ -17,6 +17,8 @@ import treasuryRoutes from './routes/treasury';
 import allocationRoutes from './routes/allocations';
 import auditLogRoutes from './routes/audit-logs';
 import dashboardRoutes from './routes/dashboard';
+import exchangeRateAdminRoutes from './routes/exchange-rate-admin.js';
+import { startExchangeRateCronJob, runDailyExchangeRateSync } from './services/exchange-rate-sync.js';
 import type { AppEnv } from './types';
 
 const app = new Hono<AppEnv>();
@@ -38,7 +40,7 @@ app.use('/api/*', cors({
 }));
 
 // Better Auth — handles /api/auth/*
-app.on(['POST', 'GET'], '/api/auth/**', (c) => {
+app.on(['POST', 'GET'], '/api/auth/*', (c) => {
     return auth.handler(c.req.raw);
 });
 
@@ -77,9 +79,9 @@ app.route('/api/audit-logs', auditLogRoutes);
 app.use('/api/dashboard/*', authMiddleware);
 app.route('/api/dashboard', dashboardRoutes);
 
-// Admin-only routes
 app.use('/api/admin/*', authMiddleware, adminMiddleware);
 app.route('/api/admin/users', userRoutes);
+app.route('/api/admin', exchangeRateAdminRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -95,3 +97,7 @@ serve({
     fetch: app.fetch,
     port,
 });
+
+// ── Exchange Rate Daily Sync ──────────────────────────────────────────────────
+// เริ่ม cron job ซิงค์อัตราแลกเปลี่ยนทุกวันตามเวลาที่ตั้งใน DB (default 18:00 น.)
+startExchangeRateCronJob();

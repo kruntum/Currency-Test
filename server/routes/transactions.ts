@@ -14,6 +14,7 @@ const invoiceItemSchema = z.object({
     netWeight: z.string().optional().nullable(),
     price: z.string().min(1),
     totalPrice: z.string().min(1),
+    itemNo: z.number().optional().nullable(),
 });
 
 const invoiceSchema = z.object({
@@ -178,6 +179,7 @@ transactionRoutes.post('/', async (c) => {
             netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
             price: parseFloat(item.price),
             totalPrice: parseFloat(item.totalPrice),
+            itemNo: item.itemNo,
         })),
     }));
 
@@ -223,7 +225,7 @@ transactionRoutes.post('/', async (c) => {
                     createdBy: inv.createdBy,
                     items: {
                         create: inv.items.map((it, idx) => ({
-                            itemNo: idx + 1,
+                            itemNo: it.itemNo ?? (idx + 1),
                             goodsName: it.goodsName,
                             netWeight: it.netWeight,
                             price: it.price,
@@ -258,6 +260,298 @@ transactionRoutes.post('/', async (c) => {
 
     return c.json({ data: tx }, 201);
 });
+
+// POST /api/transactions/validate-import
+transactionRoutes.post('/validate-import', async (c) => {
+    const companyUser = c.get('companyUser');
+    if (!companyUser) return c.json({ error: 'Unauthorized' }, 401);
+    const companyId = companyUser.companyId;
+
+    // Get company Tax ID
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { taxId: true, name: true }
+    });
+
+    const cleanTaxIdStr = (tax: string | null | undefined) => {
+        if (!tax) return '';
+        return String(tax).replace(/\D/g, '');
+    };
+
+    const companyTaxClean = cleanTaxIdStr(company?.taxId);
+
+    const body = await c.req.json();
+    const { transactions } = body as { transactions: any[] };
+
+    if (!transactions || !Array.isArray(transactions)) {
+        return c.json({ error: 'Invalid input. Expected array of transactions.' }, 400);
+    }
+
+    // Check existing declaration numbers in this company
+    const declNos = transactions.map(tx => String(tx.declarationNumber || '').trim()).filter(Boolean);
+    const existingTransactions = await prisma.transaction.findMany({
+        where: {
+            companyId,
+            declarationNumber: { in: declNos }
+        },
+        select: {
+            declarationNumber: true,
+            paymentStatus: true,
+            paidThb: true
+        }
+    });
+
+    const existingMap = new Map(existingTransactions.map(tx => [tx.declarationNumber, tx]));
+
+    // Fetch supported currencies
+    const currenciesList = await prisma.currency.findMany({ select: { code: true } });
+    const supportedCurrencies = new Set(currenciesList.map(curr => curr.code.toUpperCase()));
+
+    const validated = transactions.map((tx) => {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+
+        // 1. First step check: Exporter Tax ID matching
+        const fileTaxClean = cleanTaxIdStr(tx.exporterTaxNo);
+        let taxMismatch = false;
+        if (!fileTaxClean) {
+            warnings.push('ไม่พบเลขผู้เสียภาษีอากรผู้ส่งออกในไฟล์');
+        } else if (fileTaxClean !== companyTaxClean) {
+            taxMismatch = true;
+            warnings.push(`เลขผู้เสียภาษีอากรในไฟล์ (${tx.exporterTaxNo}) ไม่ตรงกับของบริษัทนี้ (${company?.taxId || 'ไม่ได้ตั้งค่าไว้'})`);
+        }
+
+        // 2. Duplicate check
+        let duplicateStatus: 'none' | 'duplicate_eligible' | 'duplicate_blocked' = 'none';
+        const existing = existingMap.get(tx.declarationNumber);
+        if (existing) {
+            if (existing.paymentStatus === 'PENDING' && existing.paidThb.toNumber() === 0) {
+                duplicateStatus = 'duplicate_eligible';
+                warnings.push('เลขที่ใบขนสินค้านี้มีอยู่แล้วในระบบ (สามารถบันทึกเขียนทับได้เนื่องจากยังไม่มีการชำระเงิน)');
+            } else {
+                duplicateStatus = 'duplicate_blocked';
+                errors.push('เลขที่ใบขนสินค้านี้มีอยู่แล้วในระบบ และมีการตัดชำระเงินแล้ว (ไม่สามารถนำเข้าซ้ำได้)');
+            }
+        }
+
+        // 3. Currency check
+        const curr = String(tx.currencyCode || '').toUpperCase();
+        if (!supportedCurrencies.has(curr)) {
+            errors.push(`ไม่รองรับสกุลเงิน ${curr} ในระบบ`);
+        }
+
+        // Date formats validation is handled during import confirmation; it starts empty on upload
+
+        // Status determination
+        let status: 'valid' | 'warning' | 'error' = 'valid';
+        if (errors.length > 0) {
+            status = 'error';
+        } else if (warnings.length > 0) {
+            status = 'warning';
+        }
+
+        return {
+            ...tx,
+            validation: {
+                status,
+                taxMismatch,
+                duplicateStatus,
+                messages: [...errors, ...warnings]
+            }
+        };
+    });
+
+    return c.json({ data: validated });
+});
+
+// POST /api/transactions/confirm-import
+transactionRoutes.post('/confirm-import', async (c) => {
+    const companyUser = c.get('companyUser');
+    if (!companyUser || !['OWNER', 'ADMIN', 'DATA_ENTRY'].includes(companyUser.role)) {
+        return c.json({ error: 'Forbidden: Insufficient role for this operation' }, 403);
+    }
+    const user = c.get('user');
+    const companyId = companyUser.companyId;
+
+    const body = await c.req.json();
+    const { items } = body as {
+        items: Array<{
+            transaction: any;
+            customerId: number | null;
+            duplicateAction: 'skip' | 'overwrite';
+            exchangeRate: string;
+            rateDate: string;
+        }>;
+    };
+
+    if (!items || !Array.isArray(items)) {
+        return c.json({ error: 'Invalid input. Expected items array.' }, 400);
+    }
+
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { roundingMethod: true }
+    });
+    const roundingMethod = company?.roundingMethod || 'ITEM_ROUNDING';
+
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            let importCount = 0;
+            let overwriteCount = 0;
+
+            for (const item of items) {
+                const { transaction: txn, customerId, duplicateAction, exchangeRate, rateDate } = item;
+                const declNo = txn.declarationNumber;
+
+                // Check duplicate state in database
+                const existing = await tx.transaction.findFirst({
+                    where: { companyId, declarationNumber: declNo },
+                    select: { id: true, paymentStatus: true, paidThb: true }
+                });
+
+                if (existing) {
+                    if (duplicateAction === 'skip') {
+                        continue;
+                    }
+                    if (duplicateAction === 'overwrite') {
+                        if (existing.paymentStatus !== 'PENDING' || existing.paidThb.toNumber() > 0) {
+                            throw new Error(`ใบขนเลขที่ ${declNo} มีการชำระเงินแล้ว ไม่สามารถเขียนทับได้`);
+                        }
+                        // Delete old invoices (cascade deletes invoice_items) and then the transaction itself
+                        const invoiceIds = (await tx.invoice.findMany({
+                            where: { transactionId: existing.id },
+                            select: { id: true },
+                        })).map(i => i.id);
+
+                        if (invoiceIds.length > 0) {
+                            await tx.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+                            await tx.invoice.deleteMany({ where: { transactionId: existing.id } });
+                        }
+                        await tx.transaction.delete({ where: { id: existing.id } });
+                        overwriteCount++;
+                    }
+                }
+
+                // Prepare products. Find or create on the fly.
+                const goodsNames = Array.from(new Set(
+                    txn.invoices.flatMap((inv: any) => inv.items.map((it: any) => it.goodsName))
+                )) as string[];
+
+                const existingProducts = await tx.product.findMany({
+                    where: { name: { in: goodsNames } }
+                });
+                const existingProductsMap = new Map(existingProducts.map(p => [p.name, p]));
+
+                for (const name of goodsNames) {
+                    if (!existingProductsMap.has(name)) {
+                        const newProd = await tx.product.create({
+                            data: {
+                                name,
+                                createdBy: user.id
+                            }
+                        });
+                        existingProductsMap.set(name, newProd);
+                    }
+                }
+
+                const rawInvoices = txn.invoices.map((inv: any) => ({
+                    invoiceNumber: inv.invoiceNumber,
+                    invoiceDate: new Date(inv.invoiceDate),
+                    items: inv.items.map((it: any) => ({
+                        goodsName: it.goodsName,
+                        netWeight: it.netWeight ? parseFloat(it.netWeight) : null,
+                        price: parseFloat(it.price) || 0,
+                        totalPrice: parseFloat(it.totalPrice) || 0,
+                        itemNo: it.itemNo
+                    }))
+                }));
+
+                const rate = parseFloat(exchangeRate);
+                const calculated = calculateTransactionTotals({
+                    invoices: rawInvoices,
+                    exchangeRate: rate,
+                    currencyCode: txn.currencyCode,
+                    companyId,
+                    userId: user.id,
+                    roundingMethod,
+                });
+
+                const totalForeign = calculated.grandTotalForeign;
+                const totalThb = calculated.grandTotalThb;
+                const invoicesData = calculated.invoices;
+
+                const createdTx = await tx.transaction.create({
+                    data: {
+                        declarationNumber: declNo,
+                        declarationDate: new Date(txn.declarationDate),
+                        invoiceNumber: invoicesData.map(i => i.invoiceNumber).join(', '),
+                        invoiceDate: invoicesData[0].invoiceDate,
+                        currencyCode: txn.currencyCode,
+                        foreignAmount: totalForeign,
+                        exchangeRate: rate,
+                        thbAmount: totalThb,
+                        rateDate: new Date(rateDate),
+                        rateSource: 'BOT',
+                        companyId,
+                        customerId: customerId || null,
+                        createdBy: user.id,
+                        notes: txn.notes || null,
+                        paymentStatus: 'PENDING',
+                        paidThb: 0,
+                        invoices: {
+                            create: invoicesData.map((inv) => ({
+                                invoiceNumber: inv.invoiceNumber,
+                                invoiceDate: inv.invoiceDate,
+                                currencyCode: inv.currencyCode,
+                                totalForeign: inv.totalForeign,
+                                totalThb: inv.totalThb,
+                                companyId: inv.companyId,
+                                createdBy: inv.createdBy,
+                                items: {
+                                    create: inv.items.map((it, idx) => ({
+                                        itemNo: it.itemNo ?? (idx + 1),
+                                        goodsName: it.goodsName,
+                                        netWeight: it.netWeight,
+                                        price: it.price,
+                                        priceTHB: it.priceTHB,
+                                        totalPrice: it.totalPrice,
+                                        totalPriceTHB: it.totalPriceTHB,
+                                        productId: existingProductsMap.get(it.goodsName)?.id || null
+                                    })),
+                                },
+                            })),
+                        },
+                    }
+                });
+
+                // Log audit log
+                await logAuditData({
+                    companyId,
+                    userId: user.id,
+                    action: existing ? 'UPDATE_TRANSACTION' : 'CREATE_TRANSACTION',
+                    entity: 'TRANSACTION',
+                    entityId: createdTx.id,
+                    newValues: {
+                        declarationNumber: createdTx.declarationNumber,
+                        foreignAmount: createdTx.foreignAmount,
+                        exchangeRate: createdTx.exchangeRate,
+                        thbAmount: createdTx.thbAmount
+                    }
+                });
+
+                importCount++;
+            }
+
+            return { importCount, overwriteCount };
+        });
+
+        return c.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Import confirmation failed:', err);
+        return c.json({ error: (err as Error).message || 'Failed to confirm import' }, 500);
+    }
+});
+
 
 // PUT /api/transactions/:id - update (replace invoices + items)
 // PUT — OWNER, ADMIN, DATA_ENTRY only
@@ -302,6 +596,7 @@ transactionRoutes.put('/:id', async (c) => {
             netWeight: item.netWeight ? parseFloat(item.netWeight) : null,
             price: parseFloat(item.price),
             totalPrice: parseFloat(item.totalPrice),
+            itemNo: item.itemNo,
         })),
     }));
 
@@ -363,7 +658,7 @@ transactionRoutes.put('/:id', async (c) => {
                         createdBy: inv.createdBy,
                         items: {
                             create: inv.items.map((it, idx) => ({
-                                itemNo: idx + 1,
+                                itemNo: it.itemNo ?? (idx + 1),
                                 goodsName: it.goodsName,
                                 netWeight: it.netWeight,
                                 price: it.price,

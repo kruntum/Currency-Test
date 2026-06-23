@@ -21,7 +21,7 @@ import { useSession } from '@/lib/auth-client';
 export function CompanySwitcher() {
   const { isMobile } = useSidebar();
   const navigate = useNavigate();
-  const { companyId } = useParams();
+  const { companyId: urlCompanyId } = useParams();
   const { companies, fetchCompanies } = useCompanyStore();
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
 
@@ -34,13 +34,15 @@ export function CompanySwitcher() {
     fetchCompanies();
   }, [fetchCompanies]);
 
-  // Set active company based on URL param
+  const effectiveCompanyId = urlCompanyId || localStorage.getItem('lastActiveCompanyId');
+
+  // Set active company based on URL param or local storage
   useEffect(() => {
-    if (companyId && companies.length > 0) {
-      const found = companies.find((c) => c.id === parseInt(companyId));
+    if (effectiveCompanyId && companies.length > 0) {
+      const found = companies.find((c) => c.id === parseInt(effectiveCompanyId));
       if (found) setActiveCompany(found);
     }
-  }, [companyId, companies]);
+  }, [effectiveCompanyId, companies]);
 
   const handleSelectCompany = (company: Company) => {
     setActiveCompany(company);

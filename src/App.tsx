@@ -1,17 +1,20 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useSession } from '@/lib/auth-client';
 import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import TransactionPage from '@/pages/TransactionPage';
+import ImportTransactionsPage from '@/pages/ImportTransactionsPage';
 import CompanyPage from '@/pages/CompanyPage';
 import CustomerPage from '@/pages/CustomerPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import TreasuryPage from '@/pages/TreasuryPage';
 import AuditLogsPage from '@/pages/AuditLogsPage';
 import OutstandingPage from '@/pages/OutstandingPage';
+import ExchangeRateCalendarPage from '@/pages/ExchangeRateCalendarPage';
 import UsersPage from '@/pages/admin/UsersPage';
 import CurrenciesPage from '@/pages/admin/CurrenciesPage';
+import ExchangeRateSettingsPage from '@/pages/admin/ExchangeRateSettingsPage';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -44,10 +47,22 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AppToaster() {
+  const location = useLocation();
+  const isImportPage = location.pathname.includes('/import-transactions');
+  return (
+    <Toaster 
+      richColors 
+      closeButton
+      position={isImportPage ? 'top-center' : 'bottom-right'} 
+    />
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Toaster richColors />
+      <AppToaster />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
@@ -75,6 +90,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TransactionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/:companyId/import-transactions"
+          element={
+            <ProtectedRoute>
+              <ImportTransactionsPage />
             </ProtectedRoute>
           }
         />
@@ -118,6 +141,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/company/:companyId/exchange-rates"
+          element={
+            <ProtectedRoute>
+              <ExchangeRateCalendarPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Admin routes */}
         <Route
@@ -136,6 +167,16 @@ export default function App() {
             <ProtectedRoute>
               <AdminRoute>
                 <CurrenciesPage />
+              </AdminRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/exchange-rates"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <ExchangeRateSettingsPage />
               </AdminRoute>
             </ProtectedRoute>
           }

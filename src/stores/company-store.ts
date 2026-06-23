@@ -8,6 +8,7 @@ export interface Company {
     phone: string | null;
     status: string;
     roundingMethod: string;
+    excelMapping?: Record<string, string> | null;
     createdBy: string;
     createdAt: string;
     updatedAt: string;
